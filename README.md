@@ -1,6 +1,5 @@
 # 小丸工具箱重制版
 
-<<<<<<< HEAD
 ## 前言
 
 先感谢一下这个工具箱原作者，因为我用小丸工具箱用了有近10年，所以，在其精神之下，出于兴趣，重写这个软件。尽量实现原版功能和选项，同时扩展更新。
@@ -8,9 +7,6 @@
 ## 这是什么
 
 这是一个基于 Python Tkinter + FFmpeg 的本地视频工具箱，面向经常使用 DaVinci Resolve、Adobe Premiere Pro、剪映专业版等软件的创作者和后期工作流。它把常用的视频压缩、代理文件、封装转换、LUT 预览、音频转换、MediaInfo 信息查看和批量任务管理集中到一个桌面 GUI 中。
-=======
-一个基于 Python Tkinter + FFmpeg 的本地视频工具箱，面向经常使用 DaVinci Resolve、Adobe Premiere Pro、剪映专业版等软件的创作者和后期工作流。它把常用的视频压缩、代理文件、封装转换、LUT 预览、音频转换、MediaInfo 信息查看和批量任务管理集中到一个桌面 GUI 中。
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
 ## 功能特性
 
@@ -40,11 +36,7 @@
 
 可选依赖：
 
-<<<<<<< HEAD
 - `tkinterdnd2`：用于增强文件拖拽导入体验。如果没有，那就pip install tkinterdnd2
-=======
-- `tkinterdnd2`：用于增强文件拖拽导入体验。
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
 硬件编码支持取决于本机 FFmpeg 编译版本和显卡驱动：
 
@@ -174,7 +166,6 @@ output/app_settings.json
 - RM、WMV、ASF 等老格式输出能力取决于本机 FFmpeg 是否启用对应 muxer/encoder。
 - 托盘模式当前表现为点击关闭按钮后隐藏主窗口，任务仍在后台运行。
 
-<<<<<<< HEAD
 # 更新日志
 
 ## 新增功能
@@ -196,8 +187,3 @@ output/app_settings.json
 
     修复视频处理仅支持自定义宽度、缺少自定义高度的问题
     修复任务添加逻辑异常问题
-=======
-## License
-
-如果你计划开源，建议补充一个明确的开源协议，例如 MIT、Apache-2.0 或 GPL-3.0。
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
