@@ -3,7 +3,10 @@ from pathlib import Path
 
 APP_TITLE = "小丸工具箱重制版"
 WINDOW_SIZE = "1120x760"
+<<<<<<< HEAD
 BUILD_VERSION = 1
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 WINDOW_MIN_SIZE = (980, 660)
 DEFAULT_OUTPUT_DIR = Path.cwd() / "output"
 DEFAULT_PREVIEW_PATH = DEFAULT_OUTPUT_DIR / "_lut_preview.png"

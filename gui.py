@@ -8,7 +8,10 @@ import ctypes
 import re
 import json
 import shlex
+<<<<<<< HEAD
 import webbrowser
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tkinter import (
@@ -32,7 +35,10 @@ from tkinter import (
 import ffmpeg_utils as ffmpeg
 from config import (
     APP_TITLE,
+<<<<<<< HEAD
     BUILD_VERSION,
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
     AUDIO_ENCODERS,
     AUDIO_BITRATE_PRESETS,
     AUDIO_EXTENSIONS,
@@ -105,7 +111,10 @@ class VideoCompressorApp:
         self.resolution_name = StringVar(value="保持原分辨率")
         self.sharpen_name = StringVar(value="关闭")
         self.custom_width = IntVar(value=1920)
+<<<<<<< HEAD
         self.custom_height = IntVar(value=1080)
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         self.quality_mode = StringVar(value="CRF / 恒定质量")
         self.cq_value = IntVar(value=23)
         self.bitrate = StringVar(value="")
@@ -122,8 +131,11 @@ class VideoCompressorApp:
         self.lut_path = StringVar(value="")
         self.output_dir = StringVar(value=str(DEFAULT_OUTPUT_DIR))
         self.audio_output_dir = StringVar(value=str(DEFAULT_OUTPUT_DIR / "audio"))
+<<<<<<< HEAD
         self.audio_output_mode = StringVar(value="自定义")
         self.audio_overwrite_source = BooleanVar(value=False)
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         self.audio_encoder_name = StringVar(value="AAC (.m4a)")
         self.audio_page_bitrate = StringVar(value="192k")
         self.audio_sample_rate = StringVar(value="48000")
@@ -178,7 +190,11 @@ class VideoCompressorApp:
         self.x264_threads = IntVar(value=0)
         self.x264_command = StringVar(value="")
         self.default_player = StringVar(value="")
+<<<<<<< HEAD
         self.settings_path = self._app_settings_path()
+=======
+        self.settings_path = DEFAULT_OUTPUT_DIR / "app_settings.json"
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
         self._configure_style()
         self._build_ui()
@@ -306,14 +322,20 @@ class VideoCompressorApp:
         ttk.Button(header_actions, text="＋ 视频任务入队", command=self.add_current_video_to_queue).pack(side="left", padx=(8, 0))
         ttk.Button(header_actions, text="■ 停止", command=self.stop).pack(side="left", padx=(8, 0))
         ttk.Button(header_actions, text="✓ 检测环境", command=self.check_environment).pack(side="left", padx=(8, 0))
+<<<<<<< HEAD
         ttk.Button(header_actions, text="GitHub 项目", command=self.open_github_project).pack(side="left", padx=(8, 0))
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
         resource = ttk.Frame(header, style="Header.TFrame")
         resource.grid(row=0, column=1, rowspan=3, sticky="nse", padx=(18, 0))
         ttk.Label(resource, textvariable=self.resource_status, style="Status.TLabel").grid(row=0, column=0, sticky="e")
         self.resource_canvas = Canvas(resource, width=240, height=46, bg="#f7f9fc", highlightthickness=1, highlightbackground=self.COLORS["panel_border"])
         self.resource_canvas.grid(row=1, column=0, sticky="e", pady=(8, 0))
+<<<<<<< HEAD
         ttk.Label(resource, text=f"编译版本 #{BUILD_VERSION}", style="HeaderHint.TLabel").grid(row=2, column=0, sticky="e", pady=(6, 0))
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
     def _build_tabs(self, parent):
         self.notebook = ttk.Notebook(parent)
@@ -505,11 +527,14 @@ class VideoCompressorApp:
         ttk.Label(output, text="输出目录").grid(row=0, column=0, sticky="w")
         ttk.Entry(output, textvariable=self.audio_output_dir).grid(row=0, column=1, sticky="ew", padx=8)
         ttk.Button(output, text="浏览…", command=self.choose_audio_output_dir).grid(row=0, column=2)
+<<<<<<< HEAD
         audio_output_modes = ttk.Frame(output)
         audio_output_modes.grid(row=1, column=1, columnspan=2, sticky="w", padx=8, pady=(8, 0))
         ttk.Radiobutton(audio_output_modes, text="自定义", value="自定义", variable=self.audio_output_mode).pack(side="left")
         ttk.Radiobutton(audio_output_modes, text="和源文件同一目录", value="和源文件同一目录", variable=self.audio_output_mode).pack(side="left", padx=(12, 0))
         ttk.Checkbutton(output, text="覆盖源文件（警告）", variable=self.audio_overwrite_source).grid(row=2, column=1, columnspan=2, sticky="w", padx=8, pady=(8, 0))
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
         settings = ttk.LabelFrame(parent, text="音频压缩设置", padding=12)
         settings.grid(row=0, column=1, sticky="nsew")
@@ -632,9 +657,15 @@ class VideoCompressorApp:
         self.task_tree.heading("started", text="开始时间")
         self.task_tree.heading("finished", text="结束时间")
         self.task_tree.column("name", width=360)
+<<<<<<< HEAD
         self.task_tree.column("status", width=82, anchor="center", stretch=False)
         self.task_tree.column("started", width=86, anchor="center", stretch=False)
         self.task_tree.column("finished", width=86, anchor="center", stretch=False)
+=======
+        self.task_tree.column("status", width=120)
+        self.task_tree.column("started", width=150)
+        self.task_tree.column("finished", width=150)
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         self.task_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(panel, orient="vertical", command=self.task_tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -642,7 +673,10 @@ class VideoCompressorApp:
         self.task_tree.bind("<ButtonPress-1>", self._task_drag_start)
         self.task_tree.bind("<B1-Motion>", self._task_drag_motion)
         self.task_tree.bind("<Double-1>", lambda event: self.start_selected_queued_tasks())
+<<<<<<< HEAD
         self.task_tree.bind("<Delete>", lambda event: self.remove_selected_tasks())
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         actions = ttk.Frame(panel)
         actions.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         ttk.Button(actions, text="▶ 开始选中", style="Accent.TButton", command=self.start_selected_queued_tasks).pack(side="left")
@@ -799,6 +833,7 @@ class VideoCompressorApp:
 
         if self.advanced_encoders.get():
             row += 1
+<<<<<<< HEAD
             ttk.Label(panel, text="自定义宽高").grid(row=row, column=0, sticky="w", pady=5)
             size_row = ttk.Frame(panel)
             size_row.grid(row=row, column=1, sticky="ew", pady=5)
@@ -807,6 +842,10 @@ class VideoCompressorApp:
             ttk.Label(size_row, text="x", style="Hint.TLabel").grid(row=0, column=1, padx=8)
             ttk.Spinbox(size_row, from_=0, to=4320, increment=2, textvariable=self.custom_height).grid(row=0, column=2, sticky="ew")
             ttk.Label(size_row, text="宽 x 高；高度 0 表示自动保持比例", style="Hint.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
+=======
+            ttk.Label(panel, text="自定义宽度").grid(row=row, column=0, sticky="w", pady=5)
+            ttk.Spinbox(panel, from_=320, to=7680, increment=2, textvariable=self.custom_width).grid(row=row, column=1, sticky="ew", pady=5)
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
         row += 1
         ttk.Label(panel, text="并发任务").grid(row=row, column=0, sticky="w", pady=5)
@@ -894,6 +933,7 @@ class VideoCompressorApp:
         self.root.bind("<End>", lambda event: self.seek_preview_to(self.preview_duration))
         self.root.bind("<Key-s>", lambda event: self.save_current_screenshot())
         self.root.bind("<Key-o>", lambda event: self.choose_screenshot_dir())
+<<<<<<< HEAD
         self.root.bind("<Delete>", self._handle_delete_key)
 
     def open_github_project(self):
@@ -908,6 +948,8 @@ class VideoCompressorApp:
     def _handle_delete_key(self, event):
         if hasattr(self, "notebook") and self.notebook.select() == str(self.tasks_tab):
             self.remove_selected_tasks()
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
     def open_settings_window(self):
         window = Toplevel(self.root)
@@ -1033,6 +1075,7 @@ class VideoCompressorApp:
             "confirm_overwrite": self.confirm_overwrite.get(),
             "auto_open_output": self.auto_open_output.get(),
             "advanced_encoders": self.advanced_encoders.get(),
+<<<<<<< HEAD
             "audio_output_mode": self.audio_output_mode.get(),
             "audio_output_dir": self.audio_output_dir.get(),
             "audio_overwrite_source": self.audio_overwrite_source.get(),
@@ -1064,6 +1107,8 @@ class VideoCompressorApp:
             "lut_page_folder": self.lut_page_folder.get(),
             "lut_page_output": self.lut_page_output.get(),
             "lut_page_time": self.lut_page_time.get(),
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         }
         try:
             self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1091,6 +1136,7 @@ class VideoCompressorApp:
             "confirm_overwrite": self.confirm_overwrite,
             "auto_open_output": self.auto_open_output,
             "advanced_encoders": self.advanced_encoders,
+<<<<<<< HEAD
             "audio_output_mode": self.audio_output_mode,
             "audio_output_dir": self.audio_output_dir,
             "audio_overwrite_source": self.audio_overwrite_source,
@@ -1121,12 +1167,17 @@ class VideoCompressorApp:
             "lut_page_folder": self.lut_page_folder,
             "lut_page_output": self.lut_page_output,
             "lut_page_time": self.lut_page_time,
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         }
         for key, variable in mapping.items():
             if key in data:
                 variable.set(data[key])
+<<<<<<< HEAD
         if isinstance(data.get("video_settings"), dict):
             self._apply_video_settings_dict(data["video_settings"])
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         self.refresh_encoder_choices()
 
     def _on_main_close(self):
@@ -1442,7 +1493,10 @@ class VideoCompressorApp:
             "resolution_name": self.resolution_name.get(),
             "sharpen_name": self.sharpen_name.get(),
             "custom_width": self.custom_width.get(),
+<<<<<<< HEAD
             "custom_height": self.custom_height.get(),
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
             "quality_mode": self.quality_mode.get(),
             "cq_value": self.cq_value.get(),
             "bitrate": self.bitrate.get(),
@@ -1468,7 +1522,10 @@ class VideoCompressorApp:
             "resolution_name": self.resolution_name,
             "sharpen_name": self.sharpen_name,
             "custom_width": self.custom_width,
+<<<<<<< HEAD
             "custom_height": self.custom_height,
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
             "quality_mode": self.quality_mode,
             "cq_value": self.cq_value,
             "bitrate": self.bitrate,
@@ -1647,10 +1704,17 @@ class VideoCompressorApp:
         if not self.files:
             messagebox.showwarning("没有视频", "请先添加视频文件。")
             return
+<<<<<<< HEAD
         files = self._selected_files() or list(self.files)
         settings = self._settings()
         output_dir = Path(self.output_dir.get()).resolve()
         task_id = self._create_task(self._describe_video_queue_task(files, output_dir))
+=======
+        files = list(self.files)
+        settings = self._settings()
+        output_dir = Path(self.output_dir.get()).resolve()
+        task_id = self._create_task(f"视频压缩（{len(files)} 个文件）")
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         self.queued_tasks[task_id] = {
             "type": "video",
             "files": files,
@@ -1661,12 +1725,15 @@ class VideoCompressorApp:
         self._update_task_status(task_id, "已加入队列")
         self.notebook.select(self.tasks_tab)
 
+<<<<<<< HEAD
     def _describe_video_queue_task(self, files, output_dir):
         first = Path(files[0])
         if len(files) == 1:
             return f"压缩视频 {first} 到 {output_dir}"
         return f"压缩视频 {first} 等 {len(files)} 个文件到 {output_dir}"
 
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
     def start_selected_queued_tasks(self):
         selected = [item for item in self.task_tree.selection() if item in self.queued_tasks and self._task_status(item) != "运行中"]
         if not selected:
@@ -1838,8 +1905,14 @@ class VideoCompressorApp:
     def _create_task(self, task_name):
         self.task_counter += 1
         task_id = f"task_{self.task_counter}"
+<<<<<<< HEAD
         if hasattr(self, "task_tree"):
             self.task_tree.insert("", END, iid=task_id, values=(task_name, "等待中", "", ""))
+=======
+        started = time.strftime("%H:%M:%S")
+        if hasattr(self, "task_tree"):
+            self.task_tree.insert("", END, iid=task_id, values=(task_name, "等待中", started, ""))
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         return task_id
 
     def _update_task_status(self, task_id, status):
@@ -1933,7 +2006,10 @@ class VideoCompressorApp:
             resolution_name=self.resolution_name.get(),
             sharpen_name=self.sharpen_name.get(),
             custom_width=self.custom_width.get(),
+<<<<<<< HEAD
             custom_height=self.custom_height.get(),
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
             cq_value=self.cq_value.get(),
             bitrate=self.bitrate.get(),
             audio_mode=self.audio_mode.get(),
@@ -1954,10 +2030,15 @@ class VideoCompressorApp:
             bitrate=self.audio_page_bitrate.get(),
             sample_rate=self.audio_sample_rate.get(),
             channels=self.audio_channels.get(),
+<<<<<<< HEAD
             overwrite=self.file_conflict_action.get() == "覆盖" or self.audio_overwrite_source.get(),
             normalize=self.audio_normalize.get(),
             output_mode=self.audio_output_mode.get(),
             overwrite_source=self.audio_overwrite_source.get(),
+=======
+            overwrite=self.file_conflict_action.get() == "覆盖",
+            normalize=self.audio_normalize.get(),
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         )
 
     def _retro_settings(self):
@@ -2100,17 +2181,28 @@ class VideoCompressorApp:
             self._open_folder(output_dir)
 
     def _audio_worker(self):
+<<<<<<< HEAD
         settings = self._audio_settings()
         total = len(self.audio_files)
         results = []
         last_output_dir = Path(self.audio_output_dir.get()).resolve()
+=======
+        output_dir = Path(self.audio_output_dir.get()).resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        settings = self._audio_settings()
+        total = len(self.audio_files)
+        results = []
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         for index, source in enumerate(self.audio_files, start=1):
             if self.stop_requested:
                 break
             source_path = Path(source)
+<<<<<<< HEAD
             output_dir = source_path.parent if settings.output_mode == "和源文件同一目录" else Path(self.audio_output_dir.get()).resolve()
             last_output_dir = output_dir
             output_dir.mkdir(parents=True, exist_ok=True)
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
             target = ffmpeg.unique_audio_output_path(output_dir, source_path, settings)
             self.messages.put(("status", f"[{index}/{total}] 正在压缩音频：{source_path.name}"))
             results.append(self._convert_audio_one(source_path, target, settings))
@@ -2118,7 +2210,11 @@ class VideoCompressorApp:
         self._log_compression_summary(results)
         self.messages.put(("status", "音频任务完成" if not self.stop_requested else "音频任务已停止"))
         if self.auto_open_output.get() and not self.stop_requested:
+<<<<<<< HEAD
             self._open_folder(last_output_dir)
+=======
+            self._open_folder(output_dir)
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
     def _convert_audio_one(self, source_path, target, settings):
         start = time.perf_counter()
@@ -2242,8 +2338,11 @@ class VideoCompressorApp:
             channels="2",
             overwrite=self.file_conflict_action.get() == "覆盖",
             normalize=False,
+<<<<<<< HEAD
             output_mode="自定义",
             overwrite_source=False,
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         )
         candidates = [
             p for p in input_dir.rglob("*")
@@ -2292,7 +2391,10 @@ class VideoCompressorApp:
             resolution_name=resolution_name,
             sharpen_name=self.sharpen_name.get(),
             custom_width=self.custom_width.get(),
+<<<<<<< HEAD
             custom_height=self.custom_height.get(),
+=======
+>>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
             quality_mode="CRF / 恒定质量",
             cq_value=preset["cq"],
             bitrate="",
