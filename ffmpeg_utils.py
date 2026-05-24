@@ -381,13 +381,9 @@ def video_filters(settings: CompressionSettings, use_gpu_filters: bool):
     mode = RESOLUTIONS[settings.resolution_name]
     if mode:
         if mode == "custom":
-<<<<<<< HEAD
             width = settings.custom_width if settings.custom_width > 0 else -2
             height = settings.custom_height if settings.custom_height > 0 else -2
             scale = f"{width}:{height}"
-=======
-            scale = f"{settings.custom_width}:-2"
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
         else:
             scale = mode
         filters.append(f"scale_cuda={scale}" if use_gpu_filters else f"scale={scale}")

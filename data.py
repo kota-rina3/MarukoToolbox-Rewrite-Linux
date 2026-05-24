@@ -9,10 +9,7 @@ class CompressionSettings:
     resolution_name: str
     sharpen_name: str
     custom_width: int
-<<<<<<< HEAD
     custom_height: int
-=======
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
     quality_mode: str
     cq_value: int
     bitrate: str
@@ -68,11 +65,8 @@ class AudioSettings:
     channels: str
     overwrite: bool
     normalize: bool
-<<<<<<< HEAD
     output_mode: str
     overwrite_source: bool
-=======
->>>>>>> ade81b2788278b408df4bd5e61bcd26d1471ca36
 
 
 @dataclass(frozen=True)
