@@ -1,6 +1,6 @@
 {
   "interface_language": "中文",
-  "tray_mode": true,
+  "tray_mode": false,
   "x264_priority": "正常",
   "x264_threads": 0,
   "x264_command": "",
@@ -10,6 +10,19 @@
   "confirm_overwrite": true,
   "auto_open_output": false,
   "advanced_encoders": false,
+  "tab_order": [
+    "视频",
+    "变形",
+    "封装",
+    "字幕",
+    "音频",
+    "常用",
+    "复古",
+    "Lut调色",
+    "批量压缩",
+    "MediaInfo",
+    "任务管理"
+  ],
   "audio_output_mode": "自定义",
   "audio_output_dir": "Z:\\PROG视频高性能压缩器\\output\\audio",
   "audio_overwrite_source": false,
@@ -84,5 +97,7 @@
   "lut_page_video": "",
   "lut_page_folder": "",
   "lut_page_output": "Z:\\PROG视频高性能压缩器\\output\\lut_previews",
-  "lut_page_time": 1.0
+  "lut_page_time": 1.0,
+  "main_window_geometry": "1320x1002+962+511",
+  "main_window_state": "normal"
 }

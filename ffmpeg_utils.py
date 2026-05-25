@@ -19,6 +19,7 @@ def detect_environment() -> EnvironmentInfo:
         ffprobe=ffprobe,
         has_nvenc="nvenc" in encoder_text,
         has_amf="_amf" in encoder_text,
+        has_qsv="_qsv" in encoder_text,
     )
 
 
@@ -31,6 +32,7 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
     encoder, pix_fmt = resolve_encoder(encoder_key)
     is_nvenc = "nvenc" in encoder
     is_amf = encoder.endswith("_amf")
+    is_qsv = encoder.endswith("_qsv")
     preset_gpu, preset_cpu = PRESETS[settings.preset_name]
     cq = str(settings.cq_value)
     bitrate = settings.bitrate.strip()
@@ -58,6 +60,11 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
             cmd += ["-rc", "vbr", "-b:v", bitrate]
         else:
             cmd += ["-rc", "cqp", "-qp_i", cq, "-qp_p", cq, "-qp_b", cq]
+    elif is_qsv:
+        if bitrate:
+            cmd += ["-b:v", bitrate]
+        else:
+            cmd += ["-global_quality", cq]
     else:
         if encoder == "libsvtav1":
             cmd += ["-preset", "6", "-crf", cq]
@@ -314,11 +321,11 @@ def unique_output_path(output_dir: Path, source: Path, overwrite: bool):
     return unique_path(output_dir, source, suffix, overwrite)
 
 
-def unique_video_output_path(output_dir: Path, source: Path, settings: CompressionSettings, overwrite: bool):
+def unique_video_output_path(output_dir: Path, source: Path, settings: CompressionSettings, overwrite: bool, naming_mode="original_tag"):
     suffix = output_suffix(source, settings.muxer_name)
     encoder_key = ENCODERS[settings.encoder_key]
     tag = ENCODER_FILENAME_TAGS.get(encoder_key, "compressed")
-    return unique_path(output_dir, source, suffix, overwrite, tag=tag)
+    return unique_path(output_dir, source, suffix, overwrite, tag=tag, naming_mode=naming_mode)
 
 
 def unique_audio_output_path(output_dir: Path, source: Path, settings: AudioSettings):
@@ -335,8 +342,13 @@ def unique_proxy_output_path(output_dir: Path, source: Path):
     return unique_path(output_dir, source, ".mp4", False, tag="proxy")
 
 
-def unique_path(output_dir: Path, source: Path, suffix: str, overwrite: bool, tag="compressed"):
-    stem = f"{source.stem}_{tag}"
+def unique_path(output_dir: Path, source: Path, suffix: str, overwrite: bool, tag="compressed", naming_mode="original_tag"):
+    if naming_mode == "tag_original":
+        stem = f"{tag}_{source.stem}"
+    elif naming_mode == "original_only":
+        stem = source.stem
+    else:
+        stem = f"{source.stem}_{tag}"
     target = output_dir / f"{stem}{suffix}"
     if overwrite or not target.exists():
         return target
@@ -371,6 +383,8 @@ def resolve_encoder(encoder_key: str):
         return "hevc_nvenc", "p010le"
     if encoder_key == "av1_nvenc_10bit":
         return "av1_nvenc", "p010le"
+    if encoder_key == "hevc_qsv_10bit":
+        return "hevc_qsv", "p010le"
     if encoder_key == "libx265_10bit":
         return "libx265", "yuv420p10le"
     return encoder_key, ""

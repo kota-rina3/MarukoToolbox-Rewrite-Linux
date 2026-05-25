@@ -30,6 +30,7 @@ class EnvironmentInfo:
     ffprobe: str
     has_nvenc: bool
     has_amf: bool
+    has_qsv: bool
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,8 @@ class CompressionResult:
     elapsed_seconds: float
     source_size: int
     target_size: int
+    started_at: str = ""
+    ended_at: str = ""
 
     @property
     def saved_ratio(self):
