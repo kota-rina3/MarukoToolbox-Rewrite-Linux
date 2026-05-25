@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import hashlib
 from pathlib import Path
 
 from config import AUDIO_ENCODERS, AUDIO_MODES, ENCODER_FILENAME_TAGS, ENCODERS, PRESETS, RESOLUTIONS, RETRO_FORMATS, RETRO_RESOLUTIONS, SHARPEN_LEVELS, VIDEO_MUXERS
@@ -46,6 +47,11 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
     cmd += ["-i", str(source)]
 
     filters = video_filters(settings, is_nvenc and not use_cpu_filters)
+    watermark_payload = build_hidden_watermark_payload(settings)
+    if settings.hidden_watermark_enabled:
+        wm_filter = hidden_watermark_filter(settings)
+        if wm_filter:
+            filters.append(wm_filter)
     if filters:
         cmd += ["-vf", ",".join(filters)]
 
@@ -82,6 +88,8 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
     cmd += audio_args(settings)
     if settings.extra_ffmpeg_args.strip():
         cmd += settings.extra_ffmpeg_args.strip().split()
+    if watermark_payload:
+        cmd += ["-metadata", f"comment={watermark_payload}", "-metadata", f"description={watermark_payload}"]
     cmd += ["-map_metadata", "0", str(target)]
     return cmd
 
@@ -440,3 +448,65 @@ def has_sharpen(settings: CompressionSettings):
 
 def filter_path(path: str):
     return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+
+
+def escape_drawtext_text(text: str):
+    return (
+        text.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace("%", "\\%")
+        .replace(",", "\\,")
+    )
+
+
+def build_hidden_watermark_payload(settings: CompressionSettings):
+    if not settings.hidden_watermark_enabled:
+        return ""
+    mode = (settings.hidden_watermark_mode or "").strip()
+    if mode in {"text", "文字"}:
+        text = settings.hidden_watermark_text.strip()
+        if not text:
+            return ""
+        return f"MTBX-HW:v1:text:{text}"
+    if mode in {"image", "图片"}:
+        image = settings.hidden_watermark_image.strip()
+        if not image:
+            return ""
+        path = Path(image)
+        if not path.exists():
+            return ""
+        digest = hashlib.sha1(path.read_bytes()).hexdigest()[:16]
+        return f"MTBX-HW:v1:image:{path.name}:{digest}"
+    return ""
+
+
+def hidden_watermark_filter(settings: CompressionSettings):
+    if not settings.hidden_watermark_enabled:
+        return ""
+    mode = (settings.hidden_watermark_mode or "").strip()
+    if mode in {"text", "文字"}:
+        text = settings.hidden_watermark_text.strip()
+        if not text:
+            return ""
+        escaped = escape_drawtext_text(text)
+        return f"drawtext=text='{escaped}':x=w-tw-20:y=h-th-20:fontsize=22:fontcolor=white@0.035:borderw=0"
+    if mode in {"image", "图片"}:
+        return ""
+    return ""
+
+
+def extract_hidden_watermark_payload(media_info: dict):
+    if not isinstance(media_info, dict):
+        return ""
+    tags = {}
+    fmt = media_info.get("format")
+    if isinstance(fmt, dict):
+        tags = fmt.get("tags") or {}
+    if not isinstance(tags, dict):
+        return ""
+    for key in ("comment", "description", "COMMENT", "DESCRIPTION"):
+        value = str(tags.get(key, "")).strip()
+        if value.startswith("MTBX-HW:v1:"):
+            return value
+    return ""

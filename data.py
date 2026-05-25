@@ -22,6 +22,10 @@ class CompressionSettings:
     use_lut: bool
     lut_path: str
     extra_ffmpeg_args: str
+    hidden_watermark_enabled: bool
+    hidden_watermark_mode: str
+    hidden_watermark_text: str
+    hidden_watermark_image: str
 
 
 @dataclass(frozen=True)

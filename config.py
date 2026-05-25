@@ -1,10 +1,10 @@
 ﻿from pathlib import Path
 
 
-APP_TITLE = "灏忎父宸ュ叿绠遍噸鍒剁増"
+APP_TITLE = "小丸工具箱重制版"
 WINDOW_SIZE = "1320x820"
 
-BUILD_VERSION = "0525"
+BUILD_VERSION = "1.1.0"
 WINDOW_MIN_SIZE = (1120, 700)
 DEFAULT_OUTPUT_DIR = Path.cwd() / "output"
 DEFAULT_PREVIEW_PATH = DEFAULT_OUTPUT_DIR / "_lut_preview.png"
@@ -137,11 +137,11 @@ VIDEO_MUXERS = {
 
 AUDIO_MODES = {
     "复制音频流": "copy",
-    "AAC 閲嶆柊缂栫爜": "aac",
-    "Opus 閲嶆柊缂栫爜": "libopus",
-    "MP3 閲嶆柊缂栫爜": "libmp3lame",
-    "FLAC 鏃犳崯缂栫爜": "flac",
-    "绉婚櫎闊抽": "none",
+    "AAC 重新编码": "aac",
+    "Opus 重新编码": "libopus",
+    "MP3 重新编码": "libmp3lame",
+    "FLAC 无损编码": "flac",
+    "移除音频": "none",
 }
 
 AUDIO_ENCODERS = {
@@ -156,55 +156,55 @@ AUDIO_BITRATE_PRESETS = {
     "AAC (.m4a)": ["96k", "128k", "160k", "192k", "256k", "320k"],
     "MP3 (.mp3)": ["128k", "192k", "256k", "320k"],
     "Opus (.opus)": ["64k", "96k", "128k", "160k", "192k"],
-    "FLAC (.flac)": ["鏃犳崯"],
-    "WAV PCM (.wav)": ["鏃犳崯"],
+    "FLAC (.flac)": ["无损"],
+    "WAV PCM (.wav)": ["无损"],
 }
 
 BATCH_PRESETS = {
-    "楂樿川閲忓綊妗?H.265 4K": {
+    "高质量归档 H.265 4K": {
         "encoder": "GPU H.265 / HEVC (hevc_nvenc)",
         "resolution": "2160p / 4K",
         "cq": 22,
-        "audio": "AAC 閲嶆柊缂栫爜",
+        "audio": "AAC 重新编码",
         "audio_bitrate": "192k",
         "muxer": "MP4 (.mp4)",
     },
-    "楂樿川閲忓綊妗?H.265 2K": {
+    "高质量归档 H.265 2K": {
         "encoder": "GPU H.265 / HEVC (hevc_nvenc)",
         "resolution": "1440p / 2K",
         "cq": 23,
-        "audio": "AAC 閲嶆柊缂栫爜",
+        "audio": "AAC 重新编码",
         "audio_bitrate": "192k",
         "muxer": "MP4 (.mp4)",
     },
-    "缃戠洏褰掓。 H.265 1080p": {
+    "网盘归档 H.265 1080p": {
         "encoder": "GPU H.265 / HEVC (hevc_nvenc)",
         "resolution": "1080p",
         "cq": 24,
-        "audio": "AAC 閲嶆柊缂栫爜",
+        "audio": "AAC 重新编码",
         "audio_bitrate": "160k",
         "muxer": "MP4 (.mp4)",
     },
-    "鏋侀€熶綋绉帇缂?H.265 720p": {
+    "极速体积压缩 H.265 720p": {
         "encoder": "GPU H.265 / HEVC (hevc_nvenc)",
         "resolution": "720p",
         "cq": 27,
-        "audio": "AAC 閲嶆柊缂栫爜",
+        "audio": "AAC 重新编码",
         "audio_bitrate": "128k",
         "muxer": "MP4 (.mp4)",
     },
-    "楂樺吋瀹?H.264 1080p": {
+    "高兼容 H.264 1080p": {
         "encoder": "GPU H.264 / AVC (h264_nvenc)",
         "resolution": "1080p",
         "cq": 23,
-        "audio": "AAC 閲嶆柊缂栫爜",
+        "audio": "AAC 重新编码",
         "audio_bitrate": "192k",
         "muxer": "MP4 (.mp4)",
     },
 }
 
 VIDEO_FILETYPES = [
-    ("瑙嗛鏂囦欢", "*.mp4 *.mov *.mkv *.avi *.wmv *.flv *.webm *.m4v *.ts *.mts *.m2ts *.rm *.rmvb *.vob *.mpg *.mpeg"),
+    ("视频文件", "*.mp4 *.mov *.mkv *.avi *.wmv *.flv *.webm *.m4v *.ts *.mts *.m2ts *.rm *.rmvb *.vob *.mpg *.mpeg"),
     ("所有文件", "*.*"),
 ]
 
@@ -251,7 +251,7 @@ RETRO_FORMATS = {
         "audio": ["-c:a", "libmp3lame", "-b:a", "96k"],
         "tag": "flv",
     },
-    "WMA - 浠呭鍑洪煶棰?(.wma)": {
+    "WMA - 仅导出音频 (.wma)": {
         "suffix": ".wma",
         "video": ["-vn"],
         "audio": ["-c:a", "wmav2", "-b:a", "128k"],
@@ -260,7 +260,7 @@ RETRO_FORMATS = {
 }
 
 RETRO_RESOLUTIONS = {
-    "淇濇寔鍘熷垎杈ㄧ巼": "",
+    "保持原分辨率": "",
     "VCD 352x288": "352:288",
     "QVGA 320x240": "320:240",
     "VGA 640x480": "640:480",
@@ -268,11 +268,11 @@ RETRO_RESOLUTIONS = {
 }
 
 AUDIO_FILETYPES = [
-    ("闊抽鏂囦欢", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma *.aiff *.alac"),
+    ("音频文件", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma *.aiff *.alac"),
     ("所有文件", "*.*"),
 ]
 
 LUT_FILETYPES = [
-    ("LUT 鏂囦欢", "*.cube *.3dl *.dat *.m3d"),
+    ("LUT 文件", "*.cube *.3dl *.dat *.m3d"),
     ("所有文件", "*.*"),
 ]
