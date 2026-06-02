@@ -17,6 +17,7 @@ class CompressionSettings:
     audio_mode: str
     audio_bitrate: str
     muxer_name: str
+    output_speed: float
     thumbnail_time: float
     overwrite: bool
     use_lut: bool

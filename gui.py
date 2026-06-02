@@ -216,6 +216,8 @@ class VideoCompressorApp:
         self.restore_last_page_on_startup = BooleanVar(value=True)
         self.enable_drag_drop = BooleanVar(value=True)
         self.confirm_overwrite = BooleanVar(value=True)
+        self.confirm_export_settings = BooleanVar(value=False)
+        self.interface_size = StringVar(value="小")
         self.preset_name = StringVar(value="高速")
         self.resolution_name = StringVar(value="保持原分辨率")
         self.sharpen_name = StringVar(value="关闭")
@@ -229,6 +231,7 @@ class VideoCompressorApp:
         self.audio_mode = StringVar(value="复制音频流")
         self.audio_bitrate = StringVar(value="160k")
         self.muxer_name = StringVar(value="MP4 (.mp4)")
+        self.output_speed = DoubleVar(value=1.0)
         self.create_thumbnail = BooleanVar(value=True)
         self.thumbnail_only_selected = BooleanVar(value=False)
         self.thumbnail_time = DoubleVar(value=1.0)
@@ -292,6 +295,11 @@ class VideoCompressorApp:
         self.current_task = StringVar(value="待命中")
         self.resource_status = StringVar(value="CPU --%  |  GPU --%")
         self._last_cpu_times = None
+        self._last_gpu_usage = None
+        self._gpu_poll_running = False
+        self._scrollregion_jobs = {}
+        self._scrollable_canvases = []
+        self._restore_video_defaults_prompt_open = False
         self.cpu_history = []
         self.gpu_history = []
         self.preview_image = None
@@ -426,15 +434,25 @@ class VideoCompressorApp:
         self._poll_resources()
         self.root.after(900, self._maybe_start_first_run_guide)
 
+    def _ui_metrics(self):
+        size = self.interface_size.get() if hasattr(self, "interface_size") else "小"
+        metrics = {
+            "小": {"font": 10, "small_font": 9, "title_font": 18, "button_pad": (12, 7), "accent_pad": (14, 8), "entry_pad": (8, 5), "tab_pad": (18, 9), "tree_rowheight": 30},
+            "中": {"font": 11, "small_font": 10, "title_font": 20, "button_pad": (14, 8), "accent_pad": (16, 9), "entry_pad": (9, 6), "tab_pad": (20, 10), "tree_rowheight": 34},
+            "大": {"font": 12, "small_font": 11, "title_font": 22, "button_pad": (16, 10), "accent_pad": (18, 11), "entry_pad": (10, 7), "tab_pad": (22, 12), "tree_rowheight": 38},
+        }
+        return metrics.get(size, metrics["小"])
+
     def _configure_style(self):
         style = ttk.Style()
         if "clam" in style.theme_names():
             style.theme_use("clam")
         colors = self.COLORS
+        metrics = self._ui_metrics()
         self.root.configure(bg=colors["bg"])
-        self.root.option_add("*Font", ("Microsoft YaHei UI", 10))
-        self.root.option_add("*Listbox.Font", ("Microsoft YaHei UI", 10))
-        self.root.option_add("*TCombobox*Listbox.Font", ("Microsoft YaHei UI", 10))
+        self.root.option_add("*Font", ("Microsoft YaHei UI", metrics["font"]))
+        self.root.option_add("*Listbox.Font", ("Microsoft YaHei UI", metrics["font"]))
+        self.root.option_add("*TCombobox*Listbox.Font", ("Microsoft YaHei UI", metrics["font"]))
         self.root.option_add("*TCombobox*Listbox.background", colors["entry_bg"])
         self.root.option_add("*TCombobox*Listbox.foreground", colors["text"])
         self.root.option_add("*TCombobox*Listbox.selectBackground", colors["list_select"])
@@ -446,10 +464,10 @@ class VideoCompressorApp:
         style.configure("Header.TFrame", background=colors["surface"])
         style.configure("TLabel", background=colors["panel"], foreground=colors["text"])
         style.configure("Surface.TLabel", background=colors["surface"], foreground=colors["text"])
-        style.configure("Title.TLabel", background=colors["surface"], foreground=colors["text"], font=("Microsoft YaHei UI", 18, "bold"))
-        style.configure("Hint.TLabel", background=colors["bg"], foreground=colors["muted"], font=("Microsoft YaHei UI", 9))
-        style.configure("HeaderHint.TLabel", background=colors["surface"], foreground=colors["muted"], font=("Microsoft YaHei UI", 9))
-        style.configure("Status.TLabel", background=colors["surface"], foreground=colors["accent"], font=("Microsoft YaHei UI", 10, "bold"))
+        style.configure("Title.TLabel", background=colors["surface"], foreground=colors["text"], font=("Microsoft YaHei UI", metrics["title_font"], "bold"))
+        style.configure("Hint.TLabel", background=colors["bg"], foreground=colors["muted"], font=("Microsoft YaHei UI", metrics["small_font"]))
+        style.configure("HeaderHint.TLabel", background=colors["surface"], foreground=colors["muted"], font=("Microsoft YaHei UI", metrics["small_font"]))
+        style.configure("Status.TLabel", background=colors["surface"], foreground=colors["accent"], font=("Microsoft YaHei UI", metrics["font"], "bold"))
 
         style.configure(
             "TLabelframe",
@@ -464,7 +482,7 @@ class VideoCompressorApp:
             "TLabelframe.Label",
             background=colors["panel"],
             foreground=colors["text"],
-            font=("Microsoft YaHei UI", 10, "bold"),
+            font=("Microsoft YaHei UI", metrics["font"], "bold"),
         )
 
         style.configure(
@@ -477,7 +495,7 @@ class VideoCompressorApp:
             borderwidth=1,
             focusthickness=0,
             focuscolor=colors["button"],
-            padding=(12, 7),
+            padding=metrics["button_pad"],
             relief="solid",
         )
         style.map(
@@ -492,8 +510,8 @@ class VideoCompressorApp:
             bordercolor=colors["accent"],
             borderwidth=1,
             focuscolor=colors["accent"],
-            font=("Microsoft YaHei UI", 10, "bold"),
-            padding=(14, 8),
+            font=("Microsoft YaHei UI", metrics["font"], "bold"),
+            padding=metrics["accent_pad"],
         )
         style.map(
             "Accent.TButton",
@@ -509,7 +527,7 @@ class VideoCompressorApp:
             darkcolor=colors["accent"],
             borderwidth=1,
             focuscolor=colors["surface_alt"],
-            padding=(12, 7),
+            padding=metrics["button_pad"],
             relief="solid",
         )
         style.map(
@@ -519,7 +537,7 @@ class VideoCompressorApp:
             foreground=[("active", colors["accent"]), ("pressed", colors["accent"])],
         )
 
-        style.configure("TEntry", fieldbackground=colors["entry_bg"], bordercolor=colors["panel_border"], padding=(8, 5), relief="flat")
+        style.configure("TEntry", fieldbackground=colors["entry_bg"], bordercolor=colors["panel_border"], padding=metrics["entry_pad"], relief="flat")
         style.map("TEntry", bordercolor=[("focus", colors["accent"])])
         style.configure(
             "TCombobox",
@@ -528,7 +546,7 @@ class VideoCompressorApp:
             foreground=colors["text"],
             bordercolor=colors["panel_border"],
             arrowcolor=colors["muted"],
-            padding=(8, 5),
+            padding=metrics["entry_pad"],
         )
         style.map(
             "TCombobox",
@@ -555,16 +573,37 @@ class VideoCompressorApp:
             selectbackground=[("readonly", colors["entry_bg"])],
             arrowcolor=[("readonly", colors["muted"]), ("active", colors["text"])],
         )
-        style.configure("TSpinbox", fieldbackground=colors["entry_bg"], bordercolor=colors["panel_border"], padding=(8, 5))
+        style.configure("TSpinbox", fieldbackground=colors["entry_bg"], bordercolor=colors["panel_border"], padding=metrics["entry_pad"])
+        for option_style in ("TCheckbutton", "TRadiobutton"):
+            style.configure(
+                option_style,
+                background=colors["panel"],
+                foreground=colors["text"],
+                focuscolor=colors["panel"],
+            )
+            style.map(
+                option_style,
+                background=[
+                    ("active", colors["button_hover"]),
+                    ("pressed", colors["button_pressed"]),
+                    ("selected", colors["panel"]),
+                ],
+                foreground=[
+                    ("active", colors["text"]),
+                    ("pressed", colors["text"]),
+                    ("selected", colors["text"]),
+                    ("disabled", colors["muted"]),
+                ],
+            )
         style.configure("Horizontal.TScale", background=colors["panel"], troughcolor=colors["progress_trough"], sliderthickness=16)
         style.configure("Horizontal.TProgressbar", troughcolor=colors["progress_trough"], background=colors["accent"], bordercolor=colors["bg"], lightcolor=colors["accent"], darkcolor=colors["accent"])
 
         style.configure("TNotebook", background=colors["bg"], borderwidth=0, tabmargins=(0, 6, 0, 0))
-        style.configure("TNotebook.Tab", background=colors["notebook_tab_bg"], foreground=colors["muted"], padding=(18, 9), font=("Microsoft YaHei UI", 10, "bold"))
+        style.configure("TNotebook.Tab", background=colors["notebook_tab_bg"], foreground=colors["muted"], padding=metrics["tab_pad"], font=("Microsoft YaHei UI", metrics["font"], "bold"))
         style.map("TNotebook.Tab", background=[("selected", colors["surface"]), ("active", colors["notebook_tab_hover"])], foreground=[("selected", colors["text"]), ("active", colors["text"])])
 
-        style.configure("Treeview", background=colors["entry_bg"], fieldbackground=colors["entry_bg"], foreground=colors["text"], rowheight=30, bordercolor=colors["panel_border"])
-        style.configure("Treeview.Heading", background=colors["tree_heading_bg"], foreground=colors["text"], font=("Microsoft YaHei UI", 10, "bold"), padding=(8, 7))
+        style.configure("Treeview", background=colors["entry_bg"], fieldbackground=colors["entry_bg"], foreground=colors["text"], rowheight=metrics["tree_rowheight"], bordercolor=colors["panel_border"])
+        style.configure("Treeview.Heading", background=colors["tree_heading_bg"], foreground=colors["text"], font=("Microsoft YaHei UI", metrics["font"], "bold"), padding=metrics["entry_pad"])
         style.map("Treeview", background=[("selected", colors["list_select"])], foreground=[("selected", "#ffffff")])
         style.configure("Vertical.TScrollbar", background=colors["scrollbar_bg"], troughcolor=colors["bg"], arrowcolor=colors["muted"], bordercolor=colors["panel_border"])
 
@@ -577,8 +616,8 @@ class VideoCompressorApp:
             darkcolor=colors["accent_hover"],
             borderwidth=1,
             focuscolor=colors["accent_hover"],
-            font=("Microsoft YaHei UI", 10, "bold"),
-            padding=(14, 8),
+            font=("Microsoft YaHei UI", metrics["font"], "bold"),
+            padding=metrics["accent_pad"],
         )
         style.map(
             "GuideGlow.TButton",
@@ -593,7 +632,7 @@ class VideoCompressorApp:
             foreground=colors["text"],
             bordercolor=colors["accent"],
             arrowcolor=colors["accent"],
-            padding=(8, 5),
+            padding=metrics["entry_pad"],
         )
         style.map(
             "GuideGlow.TCombobox",
@@ -611,6 +650,32 @@ class VideoCompressorApp:
             return
         try:
             window.iconbitmap(str(self.icon_path))
+        except Exception:
+            pass
+
+    def _set_window_geometry(self, window, geometry, center=True):
+        window.geometry(geometry)
+        if center:
+            window.after_idle(lambda w=window: self._center_window_on_parent(w))
+
+    def _center_window_on_parent(self, window, parent=None):
+        parent = parent or self.root
+        if not window.winfo_exists():
+            return
+        try:
+            parent.update_idletasks()
+            window.update_idletasks()
+            width = max(window.winfo_width(), window.winfo_reqwidth())
+            height = max(window.winfo_height(), window.winfo_reqheight())
+            parent_width = max(parent.winfo_width(), 1)
+            parent_height = max(parent.winfo_height(), 1)
+            x = parent.winfo_rootx() + (parent_width - width) // 2
+            y = parent.winfo_rooty() + (parent_height - height) // 2
+            screen_width = window.winfo_screenwidth()
+            screen_height = window.winfo_screenheight()
+            x = max(0, min(x, screen_width - width))
+            y = max(0, min(y, screen_height - height))
+            window.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
             pass
 
@@ -638,6 +703,7 @@ class VideoCompressorApp:
         self._refresh_widget_tree_theme(self.root)
 
     def _refresh_widget_tree_theme(self, widget):
+        metrics = self._ui_metrics()
         for child in widget.winfo_children():
             self._refresh_widget_tree_theme(child)
         klass = widget.winfo_class()
@@ -660,6 +726,7 @@ class VideoCompressorApp:
                     selectforeground="#ffffff",
                     highlightbackground=self.COLORS["panel_border"],
                     highlightcolor=self.COLORS["accent"],
+                    font=("Microsoft YaHei UI", metrics["font"]),
                 )
             except Exception:
                 pass
@@ -749,6 +816,7 @@ class VideoCompressorApp:
     def _build_tabs(self, parent):
         self.notebook = ttk.Notebook(parent)
         self.notebook.grid(row=1, column=0, sticky="nsew")
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
         self.common_tab = ttk.Frame(self.notebook, padding=0)
         self.video_tab = ttk.Frame(self.notebook, padding=0)
         self.subtitle_tab = ttk.Frame(self.notebook, padding=0)
@@ -799,6 +867,27 @@ class VideoCompressorApp:
             if frame is not None:
                 self.notebook.add(frame, text=name)
 
+    def _on_notebook_tab_changed(self, _event=None):
+        self.root.after_idle(self._refresh_visible_scrollregions)
+
+    def _refresh_visible_scrollregions(self):
+        current = self.notebook.select() if hasattr(self, "notebook") else ""
+        if not current:
+            return
+        try:
+            current_widget = self.root.nametowidget(current)
+        except Exception:
+            return
+        for canvas in list(self._scrollable_canvases):
+            if not canvas.winfo_exists():
+                self._scrollable_canvases.remove(canvas)
+                continue
+            parent = canvas.master
+            while parent is not None and parent is not current_widget:
+                parent = parent.master
+            if parent is current_widget:
+                self._schedule_scrollregion_update(canvas)
+
     def _build_video_tab(self, parent):
         panel = self._scrollable_frame(parent)
         panel.columnconfigure(0, weight=3)
@@ -848,8 +937,8 @@ class VideoCompressorApp:
 
     def _build_video_file_panel(self, parent):
         panel = ttk.LabelFrame(parent, text="任务列表", padding=12)
-        panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        panel.rowconfigure(2, weight=1)
+        panel.grid(row=0, column=0, sticky="new", padx=(0, 10))
+        panel.rowconfigure(2, weight=0)
         panel.columnconfigure(0, weight=1)
 
         toolbar = ttk.Frame(panel)
@@ -871,14 +960,25 @@ class VideoCompressorApp:
         self.video_output_browse_button.grid(row=0, column=2)
 
         list_frame = ttk.Frame(panel)
-        list_frame.grid(row=2, column=0, sticky="nsew")
-        list_frame.rowconfigure(0, weight=1)
+        list_frame.grid(row=2, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=0)
         list_frame.columnconfigure(0, weight=1)
-        self.file_list = self._create_work_listbox(list_frame, selectmode="extended")
-        self.file_list.grid(row=0, column=0, sticky="nsew")
+        self.file_list = self._create_work_listbox(list_frame, selectmode="extended", height=self._video_task_list_height())
+        self.file_list.grid(row=0, column=0, sticky="ew")
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.file_list.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.file_list.configure(yscrollcommand=scrollbar.set)
+
+    def _video_task_list_height(self):
+        try:
+            screen_height = self.root.winfo_screenheight()
+        except Exception:
+            screen_height = 1080
+        if screen_height <= 1200:
+            return 7
+        if screen_height <= 1800:
+            return 9
+        return 11
 
     def _build_subtitle_tab(self, parent):
         parent = self._scrollable_frame(parent)
@@ -1013,7 +1113,7 @@ class VideoCompressorApp:
             insertbackground=self.COLORS["text"],
             relief="solid",
             borderwidth=1,
-            font=("Consolas", 10),
+            font=("Microsoft YaHei UI", 10),
             padx=10,
             pady=8,
         )
@@ -1021,7 +1121,9 @@ class VideoCompressorApp:
         self.avs_script_text.bind("<<Modified>>", self._on_avs_script_modified)
         avs_scroll = ttk.Scrollbar(preview_box, orient="vertical", command=self.avs_script_text.yview)
         avs_scroll.grid(row=0, column=1, sticky="ns")
-        self.avs_script_text.configure(yscrollcommand=avs_scroll.set)
+        avs_xscroll = ttk.Scrollbar(preview_box, orient="horizontal", command=self.avs_script_text.xview)
+        avs_xscroll.grid(row=1, column=0, sticky="ew")
+        self.avs_script_text.configure(yscrollcommand=avs_scroll.set, xscrollcommand=avs_xscroll.set)
 
         actions = ttk.Frame(parent)
         actions.grid(row=3, column=0, sticky="ew", pady=(10, 0))
@@ -1505,11 +1607,32 @@ class VideoCompressorApp:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        inner.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        self._scrollable_canvases.append(canvas)
+        inner.bind("<Configure>", lambda event: self._schedule_scrollregion_update(canvas))
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(window_id, width=event.width))
         canvas.bind("<Enter>", lambda event: self._bind_canvas_wheel(canvas))
         canvas.bind("<Leave>", lambda event: self._unbind_canvas_wheel(canvas))
         return inner
+
+    def _schedule_scrollregion_update(self, canvas):
+        if not canvas.winfo_exists():
+            return
+        previous = self._scrollregion_jobs.get(canvas)
+        if previous is not None:
+            try:
+                self.root.after_cancel(previous)
+            except Exception:
+                pass
+        self._scrollregion_jobs[canvas] = self.root.after_idle(lambda c=canvas: self._update_scrollregion(c))
+
+    def _update_scrollregion(self, canvas):
+        self._scrollregion_jobs.pop(canvas, None)
+        if not canvas.winfo_exists():
+            return
+        try:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        except Exception:
+            pass
 
     def _mousewheel_units(self, event):
         num = getattr(event, "num", None)
@@ -1583,6 +1706,7 @@ class VideoCompressorApp:
         window.bind("<Next>", lambda event: self._scroll_canvas_units(canvas, 10), add="+")
 
     def _create_work_listbox(self, parent, **kwargs):
+        metrics = self._ui_metrics()
         options = {
             "activestyle": "none",
             "borderwidth": 0,
@@ -1594,7 +1718,7 @@ class VideoCompressorApp:
             "selectbackground": self.COLORS["list_select"],
             "selectforeground": "#ffffff",
             "relief": "flat",
-            "font": ("Microsoft YaHei UI", 10),
+            "font": ("Microsoft YaHei UI", metrics["font"]),
         }
         options.update(kwargs)
         return Listbox(parent, **options)
@@ -1730,6 +1854,14 @@ class VideoCompressorApp:
         row += 1
         ttk.Label(panel, text="分离器/容器").grid(row=row, column=0, sticky="w", pady=5)
         ttk.Combobox(panel, textvariable=self.muxer_name, values=list(VIDEO_MUXERS), state="readonly").grid(row=row, column=1, sticky="ew", pady=5)
+
+        row += 1
+        ttk.Label(panel, text="输出倍速").grid(row=row, column=0, sticky="w", pady=5)
+        speed_row = ttk.Frame(panel)
+        speed_row.grid(row=row, column=1, sticky="ew", pady=5)
+        speed_row.columnconfigure(0, weight=1)
+        ttk.Spinbox(speed_row, from_=0.1, to=10.0, increment=0.1, textvariable=self.output_speed).grid(row=0, column=0, sticky="ew")
+        ttk.Label(speed_row, text="1.0 为原速；变速会重编码音频", style="Hint.TLabel").grid(row=0, column=1, padx=(8, 0))
 
         row += 1
         ttk.Label(panel, text="分辨率").grid(row=row, column=0, sticky="w", pady=5)
@@ -1952,7 +2084,7 @@ class VideoCompressorApp:
         window = Toplevel(self.root)
         self._guide_window = window
         window.title("新手向导")
-        window.geometry("560x440")
+        self._set_window_geometry(window, "560x440")
         window.resizable(False, False)
         window.transient(self.root)
         self._set_window_icon(window)
@@ -2315,7 +2447,7 @@ class VideoCompressorApp:
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title("设置")
-        window.geometry("620x760")
+        self._set_window_geometry(window, "620x760")
         window.minsize(560, 520)
         window.resizable(True, True)
         shell = ttk.Frame(window)
@@ -2329,11 +2461,15 @@ class VideoCompressorApp:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        box.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        box.bind("<Configure>", lambda event: self._schedule_scrollregion_update(canvas))
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(box_id, width=event.width))
         box.columnconfigure(0, weight=1)
+        initial_settings_snapshot = self._settings_window_snapshot()
 
         def close_settings_by_x():
+            if self._settings_window_snapshot() == initial_settings_snapshot:
+                window.destroy()
+                return
             choice = messagebox.askyesnocancel("保存设置", "是否保存当前设置改动？", parent=window)
             if choice is None:
                 return
@@ -2350,8 +2486,10 @@ class VideoCompressorApp:
         ui.columnconfigure(1, weight=1)
         ttk.Label(ui, text="界面语言").grid(row=0, column=0, sticky="w", pady=5)
         ttk.Combobox(ui, textvariable=self.interface_language, values=["中文", "English"], state="readonly").grid(row=0, column=1, sticky="ew", pady=5)
-        ttk.Checkbutton(ui, text="托盘模式：点击 X 后后台继续运行", variable=self.tray_mode).grid(row=1, column=0, columnspan=2, sticky="w", pady=5)
-        ttk.Label(ui, text=f"当前版本 {self.app_version}", style="Hint.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Label(ui, text="界面大小").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Combobox(ui, textvariable=self.interface_size, values=["小", "中", "大"], state="readonly").grid(row=1, column=1, sticky="ew", pady=5)
+        ttk.Checkbutton(ui, text="托盘模式：点击 X 后后台继续运行", variable=self.tray_mode).grid(row=2, column=0, columnspan=2, sticky="w", pady=5)
+        ttk.Label(ui, text=f"当前版本 {self.app_version}", style="Hint.TLabel").grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         order_box = ttk.LabelFrame(box, text="页面排序", padding=12)
         order_box.grid(row=1, column=0, sticky="ew", pady=(10, 0))
@@ -2388,12 +2526,13 @@ class VideoCompressorApp:
         ttk.Checkbutton(features, text="高级模式显示所有编码器和进阶参数", variable=self.advanced_encoders, command=self.refresh_encoder_choices).grid(row=2, column=0, columnspan=3, sticky="w", pady=5)
         ttk.Checkbutton(features, text="启用文件拖入（需要 tkinterdnd2 支持）", variable=self.enable_drag_drop, command=self._setup_drag_drop).grid(row=3, column=0, columnspan=3, sticky="w", pady=5)
         ttk.Checkbutton(features, text="覆盖前提醒", variable=self.confirm_overwrite).grid(row=4, column=0, columnspan=3, sticky="w", pady=5)
-        ttk.Checkbutton(features, text="任务完成后打开输出目录", variable=self.auto_open_output).grid(row=5, column=0, columnspan=3, sticky="w", pady=5)
-        ttk.Checkbutton(features, text="启动时恢复上次退出页面", variable=self.restore_last_page_on_startup).grid(row=6, column=0, columnspan=3, sticky="w", pady=5)
-        ttk.Checkbutton(features, text="任务结束提示音", variable=self.play_finish_sound).grid(row=7, column=0, columnspan=3, sticky="w", pady=5)
-        ttk.Checkbutton(features, text="任务全部完成后自动关机", variable=self.shutdown_when_finished).grid(row=8, column=0, columnspan=3, sticky="w", pady=5)
-        ttk.Label(features, text="导出文件名格式").grid(row=9, column=0, sticky="w", pady=5)
-        ttk.Combobox(features, textvariable=self.export_filename_format, values=["原名_标签", "标签_原名", "仅原名"], state="readonly").grid(row=9, column=1, columnspan=2, sticky="ew", pady=5)
+        ttk.Checkbutton(features, text="导出前二次确认视频设置", variable=self.confirm_export_settings).grid(row=5, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Checkbutton(features, text="任务完成后打开输出目录", variable=self.auto_open_output).grid(row=6, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Checkbutton(features, text="启动时恢复上次退出页面", variable=self.restore_last_page_on_startup).grid(row=7, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Checkbutton(features, text="任务结束提示音", variable=self.play_finish_sound).grid(row=8, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Checkbutton(features, text="任务全部完成后自动关机", variable=self.shutdown_when_finished).grid(row=9, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Label(features, text="导出文件名格式").grid(row=10, column=0, sticky="w", pady=5)
+        ttk.Combobox(features, textvariable=self.export_filename_format, values=["原名_标签", "标签_原名", "仅原名"], state="readonly").grid(row=10, column=1, columnspan=2, sticky="ew", pady=5)
 
         device = ttk.LabelFrame(box, text="编码器偏好", padding=12)
         device.grid(row=4, column=0, sticky="ew", pady=(10, 0))
@@ -2423,6 +2562,38 @@ class VideoCompressorApp:
         self._bind_scroll_to_widget_tree(shell, canvas, bind_keys=True)
         self._bind_scroll_keys(window, canvas)
 
+    def _settings_window_snapshot(self):
+        tab_order = list(self.tab_order)
+        if hasattr(self, "tab_order_list"):
+            try:
+                tab_order = [self.tab_order_list.get(index) for index in range(self.tab_order_list.size())]
+            except Exception:
+                tab_order = list(self.tab_order)
+        return {
+            "interface_language": self.interface_language.get(),
+            "interface_size": self.interface_size.get(),
+            "tray_mode": self.tray_mode.get(),
+            "tab_order": tab_order,
+            "user_video_presets": self._settings_snapshot_presets(),
+            "default_player": self.default_player.get(),
+            "advanced_encoders": self.advanced_encoders.get(),
+            "enable_drag_drop": self.enable_drag_drop.get(),
+            "confirm_overwrite": self.confirm_overwrite.get(),
+            "confirm_export_settings": self.confirm_export_settings.get(),
+            "auto_open_output": self.auto_open_output.get(),
+            "restore_last_page_on_startup": self.restore_last_page_on_startup.get(),
+            "play_finish_sound": self.play_finish_sound.get(),
+            "shutdown_when_finished": self.shutdown_when_finished.get(),
+            "export_filename_format": self.export_filename_format.get(),
+            "preferred_device": self.preferred_device.get(),
+            "x264_priority": self.x264_priority.get(),
+            "x264_threads": self.x264_threads.get(),
+            "x264_command": self.x264_command.get(),
+        }
+
+    def _settings_snapshot_presets(self):
+        return json.dumps(self.user_video_presets, ensure_ascii=False, sort_keys=True)
+
     def _apply_preferred_encoder(self):
         if self.preferred_device.get() == "优先 CPU":
             self.encoder_name.set("CPU H.264 / AVC (libx264)")
@@ -2435,6 +2606,7 @@ class VideoCompressorApp:
             self.tab_order = [self.tab_order_list.get(index) for index in range(self.tab_order_list.size())]
             self._apply_tab_order()
         self._apply_preferred_encoder()
+        self._apply_theme(self.theme_mode.get(), persist=False)
         self._save_app_settings()
         self._log("设置已保存。")
 
@@ -2470,6 +2642,7 @@ class VideoCompressorApp:
         if not messagebox.askyesno("还原默认设置", "确认还原界面、功能和 x264 设置为默认值？"):
             return
         self.interface_language.set("中文")
+        self.interface_size.set("小")
         self.tray_mode.set(True)
         self.x264_priority.set("正常")
         self.x264_threads.set(0)
@@ -2479,6 +2652,7 @@ class VideoCompressorApp:
         self.preferred_device.set("优先 GPU")
         self.enable_drag_drop.set(True)
         self.confirm_overwrite.set(True)
+        self.confirm_export_settings.set(False)
         self.auto_open_output.set(False)
         self.shutdown_when_finished.set(False)
         self.play_finish_sound.set(True)
@@ -2493,15 +2667,16 @@ class VideoCompressorApp:
         self._log("已还原默认设置。")
 
     def show_log_window(self):
+        metrics = self._ui_metrics()
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title("运行日志")
-        window.geometry("760x460")
+        self._set_window_geometry(window, "760x460")
         frame = ttk.Frame(window, padding=12)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
-        text = Text(frame, wrap="word", background=self.COLORS["entry_bg"], foreground=self.COLORS["text"], font=("Microsoft YaHei UI", 10))
+        text = Text(frame, wrap="word", background=self.COLORS["entry_bg"], foreground=self.COLORS["text"], font=("Microsoft YaHei UI", metrics["font"]))
         text.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -2530,6 +2705,7 @@ class VideoCompressorApp:
             "theme_mode": self.theme_mode.get(),
             "first_run_guide_completed": self.first_run_guide_completed,
             "interface_language": self.interface_language.get(),
+            "interface_size": self.interface_size.get(),
             "tray_mode": self.tray_mode.get(),
             "user_video_presets": self.user_video_presets,
             "x264_priority": self.x264_priority.get(),
@@ -2540,6 +2716,7 @@ class VideoCompressorApp:
             "preferred_device": self.preferred_device.get(),
             "enable_drag_drop": self.enable_drag_drop.get(),
             "confirm_overwrite": self.confirm_overwrite.get(),
+            "confirm_export_settings": self.confirm_export_settings.get(),
             "auto_open_output": self.auto_open_output.get(),
             "shutdown_when_finished": self.shutdown_when_finished.get(),
             "play_finish_sound": self.play_finish_sound.get(),
@@ -2653,6 +2830,7 @@ class VideoCompressorApp:
         self.first_run_guide_completed = bool(data.get("first_run_guide_completed", False))
         mapping = {
             "interface_language": self.interface_language,
+            "interface_size": self.interface_size,
             "tray_mode": self.tray_mode,
             "x264_priority": self.x264_priority,
             "x264_threads": self.x264_threads,
@@ -2662,6 +2840,7 @@ class VideoCompressorApp:
             "preferred_device": self.preferred_device,
             "enable_drag_drop": self.enable_drag_drop,
             "confirm_overwrite": self.confirm_overwrite,
+            "confirm_export_settings": self.confirm_export_settings,
             "auto_open_output": self.auto_open_output,
             "shutdown_when_finished": self.shutdown_when_finished,
             "play_finish_sound": self.play_finish_sound,
@@ -2915,7 +3094,7 @@ class VideoCompressorApp:
         self.preview_window = Toplevel(self.root)
         self._set_window_icon(self.preview_window)
         self.preview_window.title(f"播放预览 - {self.preview_source_path.name}")
-        self.preview_window.geometry("1040x720")
+        self._set_window_geometry(self.preview_window, "1040x720")
         self.preview_window.columnconfigure(0, weight=1)
         self.preview_window.rowconfigure(0, weight=1)
         self.preview_window.protocol("WM_DELETE_WINDOW", self.close_player_preview)
@@ -3293,15 +3472,18 @@ class VideoCompressorApp:
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title("加载预设")
-        window.geometry("760x340")
-        window.minsize(680, 300)
+        self._set_window_geometry(window, "980x420")
+        window.minsize(860, 340)
         box = ttk.Frame(window, padding=16)
         box.pack(fill="both", expand=True)
-        box.columnconfigure((0, 1), weight=1)
+        box.columnconfigure(0, weight=2)
+        box.columnconfigure(1, weight=3)
+        box.columnconfigure(2, weight=2)
         box.rowconfigure(1, weight=1)
 
         ttk.Label(box, text="用户预设").grid(row=0, column=0, sticky="w")
-        ttk.Label(box, text="内置预设").grid(row=0, column=1, sticky="w")
+        ttk.Label(box, text="主要参数预览").grid(row=0, column=1, sticky="w", padx=(8, 8))
+        ttk.Label(box, text="内置预设").grid(row=0, column=2, sticky="w")
 
         user_box = ttk.Frame(box)
         user_box.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
@@ -3314,9 +3496,31 @@ class VideoCompressorApp:
         if self.user_video_presets:
             user_list.selection_set(0)
 
+        preview_box = ttk.Frame(box)
+        preview_box.grid(row=1, column=1, sticky="nsew", padx=8)
+        preview_box.columnconfigure(0, weight=1)
+        preview_box.rowconfigure(0, weight=1)
+        preview_text = Text(
+            preview_box,
+            wrap="word",
+            height=12,
+            background=self.COLORS["entry_bg"],
+            foreground=self.COLORS["text"],
+            insertbackground=self.COLORS["text"],
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", self._ui_metrics()["font"]),
+            padx=10,
+            pady=8,
+        )
+        preview_text.grid(row=0, column=0, sticky="nsew")
+        preview_scroll = ttk.Scrollbar(preview_box, orient="vertical", command=preview_text.yview)
+        preview_scroll.grid(row=0, column=1, sticky="ns")
+        preview_text.configure(yscrollcommand=preview_scroll.set, state="disabled")
+
         builtin_names = list(self._builtin_video_presets())
         builtin_box = ttk.Frame(box)
-        builtin_box.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        builtin_box.grid(row=1, column=2, sticky="nsew", padx=(8, 0))
         builtin_box.columnconfigure(0, weight=1)
         builtin_box.rowconfigure(0, weight=1)
         builtin_list = self._create_work_listbox(builtin_box, exportselection=False)
@@ -3327,8 +3531,23 @@ class VideoCompressorApp:
             builtin_list.selection_set(0)
 
         actions = ttk.Frame(box)
-        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        actions.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 0))
         actions.columnconfigure((0, 1), weight=1)
+
+        def refresh_user_preview(_event=None):
+            selection = user_list.curselection()
+            if selection:
+                preset = self.user_video_presets[selection[0]]
+                text = self._format_preset_preview(preset["settings"])
+            else:
+                text = "暂无用户预设。"
+            preview_text.configure(state="normal")
+            preview_text.delete("1.0", END)
+            preview_text.insert("1.0", text)
+            preview_text.configure(state="disabled")
+
+        user_list.bind("<<ListboxSelect>>", refresh_user_preview)
+        refresh_user_preview()
 
         def apply_user_preset():
             selection = user_list.curselection()
@@ -3354,6 +3573,43 @@ class VideoCompressorApp:
         ttk.Button(actions, text="加载用户预设", style="Accent.TButton", command=apply_user_preset).grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(actions, text="加载内置预设", command=apply_builtin_preset).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
+    def _format_preset_preview(self, settings):
+        data = dict(settings or {})
+        def value(key, default="未设置"):
+            text = str(data.get(key, "")).strip()
+            return text if text else default
+
+        lines = [
+            f"编码器：{value('encoder_name')}",
+            f"预设速度：{value('preset_name', self.preset_name.get())}",
+            f"质量模式：{value('quality_mode', 'CRF / 恒定质量')}",
+            f"CRF/CQ：{value('cq_value', '23')}",
+            f"目标码率：{value('bitrate')}",
+            f"分辨率：{value('resolution_name')}",
+            f"锐化：{value('sharpen_name', '关闭')}",
+            f"音频：{value('audio_mode')}",
+            f"音频码率：{value('audio_bitrate')}",
+            f"容器：{value('muxer_name')}",
+            f"输出倍速：{value('output_speed', '1.0')}x",
+        ]
+        effects = []
+        if data.get("use_lut") and str(data.get("lut_path", "")).strip():
+            effects.append(f"LUT：{data.get('lut_path')}")
+        if value("sharpen_name", "关闭") != "关闭":
+            effects.append(f"锐化：{value('sharpen_name')}")
+        if str(data.get("hidden_watermark_enabled", "")).lower() in {"true", "1"} or data.get("hidden_watermark_enabled") is True:
+            effects.append(f"隐藏水印：{value('hidden_watermark_mode', 'text')}")
+        extra = str(data.get("extra_ffmpeg_args", "")).strip()
+        if extra:
+            effects.append(f"高级参数：{extra}")
+        custom = str(data.get("custom_command", "")).strip()
+        if value("quality_mode", "") == "自定义命令" and custom:
+            effects.append(f"自定义命令：{custom}")
+        lines.append("")
+        lines.append("影响画面/声音的设置：")
+        lines.extend(f"- {item}" for item in effects) if effects else lines.append("- 无额外效果设置")
+        return "\n".join(lines)
+
     def _video_settings_dict(self):
         return {
             "encoder_name": self.encoder_name.get(),
@@ -3370,6 +3626,7 @@ class VideoCompressorApp:
             "audio_mode": self.audio_mode.get(),
             "audio_bitrate": self.audio_bitrate.get(),
             "muxer_name": self.muxer_name.get(),
+            "output_speed": self.output_speed.get(),
             "create_thumbnail": self.create_thumbnail.get(),
             "thumbnail_only_selected": self.thumbnail_only_selected.get(),
             "thumbnail_time": self.thumbnail_time.get(),
@@ -3400,6 +3657,7 @@ class VideoCompressorApp:
             "audio_mode": self.audio_mode,
             "audio_bitrate": self.audio_bitrate,
             "muxer_name": self.muxer_name,
+            "output_speed": self.output_speed,
             "create_thumbnail": self.create_thumbnail,
             "thumbnail_only_selected": self.thumbnail_only_selected,
             "thumbnail_time": self.thumbnail_time,
@@ -3675,7 +3933,7 @@ class VideoCompressorApp:
             self.media_compare_window = window
             self._set_window_icon(window)
             window.title("MediaInfo 参数对比")
-            window.geometry("1160x700")
+            self._set_window_geometry(window, "1160x700")
             window.minsize(980, 560)
             window.columnconfigure(0, weight=1)
             window.rowconfigure(1, weight=1)
@@ -4052,15 +4310,14 @@ class VideoCompressorApp:
 
     def check_environment(self):
         self._guide_action_flags["checked_env"] = True
-        info = ffmpeg.detect_environment()
-        if not info.ffmpeg:
-            messagebox.showerror("环境检测", "未找到 ffmpeg。请安装 FFmpeg 6.0+ 并加入 PATH。")
-            return
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title("环境检测与 Benchmark")
-        window.geometry("1280x720")
+        self._set_window_geometry(window, "1280x720")
         window.minsize(1120, 620)
+        self.environment_window = window
+        self.environment_encoder_text = ""
+        self._show_child_window_front(window)
         box = ttk.Frame(window, padding=14)
         box.pack(fill="both", expand=True)
         box.columnconfigure(0, weight=1)
@@ -4073,20 +4330,9 @@ class VideoCompressorApp:
         env_text = Text(info_box, height=12, width=42, wrap="char", bg=self.COLORS["entry_bg"], fg=self.COLORS["text"], relief="solid", borderwidth=1)
         env_text.grid(row=0, column=0, sticky="nsew")
         info_box.rowconfigure(0, weight=1)
-        gpu_summary = "、".join(self.detected_gpu_names[:3]) if self.detected_gpu_names else "未读取到显卡名称"
-        text = "\n".join([
-            f"ffmpeg: {info.ffmpeg}",
-            f"ffprobe: {info.ffprobe or '未找到，仍可压缩但进度估算会变弱'}",
-            f"NVENC 编码器: {'可用' if info.has_nvenc else '未检测到'}",
-            f"AMF 编码器: {'可用' if info.has_amf else '未检测到'}",
-            f"Intel QSV 编码器: {'可用' if info.has_qsv else '未检测到'}",
-            f"检测到显卡: {gpu_summary}",
-            "",
-            "电脑配置检查",
-            *self._system_profile_lines(),
-        ])
-        env_text.insert(END, text)
+        env_text.insert(END, "正在检测 FFmpeg、编码器和电脑配置...\n\n检测过程已放到后台执行，窗口可以正常拖动和操作。")
         env_text.configure(state="disabled")
+        self.environment_info_text = env_text
 
         bench = ttk.LabelFrame(box, text="Benchmark", padding=12)
         bench.grid(row=0, column=1, sticky="nsew")
@@ -4098,14 +4344,15 @@ class VideoCompressorApp:
         video_path = StringVar(value="")
         ttk.Label(bench, text="测试视频").grid(row=0, column=0, sticky="w", pady=(0, 8))
         ttk.Entry(bench, textvariable=video_path).grid(row=0, column=1, sticky="ew", padx=8, pady=(0, 8))
-        ttk.Button(bench, text="选择…", command=lambda: self._choose_benchmark_video(video_path)).grid(row=0, column=2, pady=(0, 8))
-
-        encoder_text = ffmpeg.run_capture([info.ffmpeg, "-hide_banner", "-encoders"]).lower()
+        ttk.Button(bench, text="选择…", command=lambda: self._choose_benchmark_video(video_path, window)).grid(row=0, column=2, pady=(0, 8))
 
         def encoder_supported(name):
             encoder_key = ENCODERS.get(name, "")
             if not encoder_key:
                 return False
+            encoder_text = getattr(self, "environment_encoder_text", "")
+            if not encoder_text:
+                return True
             resolved_encoder, _ = ffmpeg.resolve_encoder(encoder_key)
             pattern = rf"(?<![a-z0-9_]){re.escape(resolved_encoder.lower())}(?![a-z0-9_])"
             return bool(re.search(pattern, encoder_text))
@@ -4169,11 +4416,67 @@ class VideoCompressorApp:
         scrollbar = ttk.Scrollbar(bench, orient="vertical", command=result_tree.yview)
         scrollbar.grid(row=4, column=3, sticky="ns")
         result_tree.configure(yscrollcommand=scrollbar.set)
+        threading.Thread(target=self._environment_detection_worker, daemon=True).start()
 
-    def _choose_benchmark_video(self, variable):
-        path = filedialog.askopenfilename(title="选择 Benchmark 视频", filetypes=VIDEO_FILETYPES)
+    def _show_child_window_front(self, window):
+        try:
+            window.transient(self.root)
+            window.lift()
+            window.focus_force()
+            window.attributes("-topmost", True)
+            window.after(250, lambda w=window: w.winfo_exists() and w.attributes("-topmost", False))
+        except Exception:
+            pass
+
+    def _environment_detection_worker(self):
+        try:
+            info = ffmpeg.detect_environment()
+            encoder_text = ffmpeg.run_capture([info.ffmpeg, "-hide_banner", "-encoders"]).lower() if info.ffmpeg else ""
+            system_lines = self._system_profile_lines()
+            gpu_names = self._windows_cim_list("Win32_VideoController", "Name") if os.name == "nt" else []
+            self.messages.put(("environment_update", (info, encoder_text, system_lines, gpu_names)))
+        except Exception as exc:
+            self.messages.put(("environment_update", (None, "", [f"检测失败：{exc}"], [])))
+
+    def _apply_environment_update(self, payload):
+        info, encoder_text, system_lines, gpu_names = payload
+        self.environment_encoder_text = encoder_text or ""
+        if gpu_names:
+            self.detected_gpu_names = gpu_names
+        text_widget = getattr(self, "environment_info_text", None)
+        window = getattr(self, "environment_window", None)
+        if not text_widget or not text_widget.winfo_exists():
+            return
+        if info is None or not info.ffmpeg:
+            lines = ["未找到 ffmpeg。请安装 FFmpeg 6.0+ 并加入 PATH。", "", *system_lines]
+            if window and window.winfo_exists():
+                messagebox.showerror("环境检测", "未找到 ffmpeg。请安装 FFmpeg 6.0+ 并加入 PATH。", parent=window)
+        else:
+            gpu_summary = "、".join((gpu_names or self.detected_gpu_names)[:3]) if (gpu_names or self.detected_gpu_names) else "未读取到显卡名称"
+            lines = [
+                f"ffmpeg: {info.ffmpeg}",
+                f"ffprobe: {info.ffprobe or '未找到，仍可压缩但进度估算会变弱'}",
+                f"NVENC 编码器: {'可用' if info.has_nvenc else '未检测到'}",
+                f"AMF 编码器: {'可用' if info.has_amf else '未检测到'}",
+                f"Intel QSV 编码器: {'可用' if info.has_qsv else '未检测到'}",
+                f"检测到显卡: {gpu_summary}",
+                "",
+                "电脑配置检查",
+                *system_lines,
+            ]
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", END)
+        text_widget.insert("1.0", "\n".join(lines))
+        text_widget.configure(state="disabled")
+        if window and window.winfo_exists():
+            self._show_child_window_front(window)
+
+    def _choose_benchmark_video(self, variable, parent=None):
+        path = filedialog.askopenfilename(title="选择 Benchmark 视频", filetypes=VIDEO_FILETYPES, parent=parent)
         if path:
             variable.set(path)
+        if parent and parent.winfo_exists():
+            self._show_child_window_front(parent)
 
     def _system_profile_lines(self):
         os_text = f"{platform.system()} {platform.release()}"
@@ -4338,6 +4641,10 @@ class VideoCompressorApp:
         if not self.files:
             messagebox.showwarning("没有视频", "请先添加单个或批量视频。")
             return
+        settings = self._settings()
+        output_dir = Path(self.output_dir.get()).resolve()
+        if not self._confirm_video_export_settings("开始导出", self.files, output_dir, settings):
+            return
         self.export_record_context = self._build_export_record_context(len(self.files))
         self._start_worker("视频压缩", self._compress_worker)
 
@@ -4363,6 +4670,8 @@ class VideoCompressorApp:
         files = self._selected_files() or list(self.files)
         settings = self._settings()
         output_dir = Path(self.output_dir.get()).resolve()
+        if not self._confirm_video_export_settings("添加到任务队列", files, output_dir, settings):
+            return
         task_id = self._create_task(self._describe_video_queue_task(files, output_dir))
         self.queued_tasks[task_id] = {
             "type": "video",
@@ -4635,6 +4944,120 @@ class VideoCompressorApp:
             return True
         return messagebox.askyesno("确认覆盖", "当前文件冲突策略为覆盖，已存在文件会被替换。是否继续？")
 
+    def _confirm_video_export_settings(self, action_text, files, output_dir, settings):
+        if not self.confirm_export_settings.get():
+            return True
+        summary = self._video_export_confirmation_text(action_text, files, output_dir, settings)
+        return self._show_export_confirmation_dialog(action_text, summary)
+
+    def _video_export_confirmation_text(self, action_text, files, output_dir, settings):
+        file_count = len(files)
+        preview_files = [str(Path(path)) for path in files[:8]]
+        if file_count > len(preview_files):
+            preview_files.append(f"... 另有 {file_count - len(preview_files)} 个文件")
+
+        speed_value = self._normalized_speed_value(settings.output_speed)
+        speed = self._format_speed_value(speed_value)
+        effect_notes = []
+        if settings.quality_mode == "自定义命令":
+            effect_notes.append("自定义命令：将按命令内容导出，页面上的部分选项可能不会生效")
+        if settings.resolution_name != "保持原分辨率":
+            effect_notes.append(f"分辨率变更：{settings.resolution_name}")
+        if settings.sharpen_name != "关闭":
+            effect_notes.append(f"锐化滤镜：{settings.sharpen_name}")
+        if settings.use_lut and settings.lut_path.strip():
+            effect_notes.append(f"LUT 调色：{settings.lut_path.strip()}")
+        if speed_value != 1.0:
+            effect_notes.append(f"输出变速：{speed}x，音频会同步变速")
+            if settings.audio_mode == "复制音频流":
+                effect_notes.append("音频复制模式下变速会自动改为 AAC 重编码")
+        if settings.hidden_watermark_enabled:
+            effect_notes.append(f"隐藏水印：{settings.hidden_watermark_mode}")
+        if settings.extra_ffmpeg_args.strip():
+            effect_notes.append(f"高级参数：{settings.extra_ffmpeg_args.strip()}")
+
+        lines = [
+            f"即将{action_text}，请确认是否使用以下设置。",
+            "",
+            "输入文件",
+            f"文件数量：{file_count}",
+            *preview_files,
+            "",
+            "输出基础属性",
+            f"输出目录：{output_dir}",
+            f"文件名格式：{self.export_filename_format.get()}",
+            f"文件冲突：{self.file_conflict_action.get()}",
+            f"容器：{settings.muxer_name}",
+            f"编码器：{settings.encoder_key}",
+            f"速度/质量预设：{settings.preset_name}",
+            f"质量模式：{settings.quality_mode}",
+            f"CRF/CQ：{settings.cq_value}",
+            f"目标码率：{settings.bitrate.strip() or '未设置'}",
+            f"分辨率：{settings.resolution_name}",
+            f"音频：{settings.audio_mode}",
+            f"音频码率：{settings.audio_bitrate.strip() or '未设置'}",
+            f"输出倍速：{speed}x",
+            f"缩略图时间：{settings.thumbnail_time} 秒",
+            "",
+            "影响画面/声音效果的设置",
+        ]
+        if effect_notes:
+            lines.extend(f"- {note}" for note in effect_notes)
+        else:
+            lines.append("- 未启用额外滤镜、变速、水印或高级参数")
+        return "\n".join(lines)
+
+    def _format_speed_value(self, value):
+        speed = self._normalized_speed_value(value)
+        return f"{speed:.3f}".rstrip("0").rstrip(".")
+
+    def _normalized_speed_value(self, value):
+        try:
+            speed = float(value)
+        except Exception:
+            speed = 1.0
+        if speed <= 0:
+            speed = 1.0
+        return speed
+
+    def _show_export_confirmation_dialog(self, action_text, summary):
+        window = Toplevel(self.root)
+        self._set_window_icon(window)
+        window.title("确认导出设置")
+        self._set_window_geometry(window, "680x560")
+        window.minsize(560, 420)
+        window.transient(self.root)
+        window.grab_set()
+
+        result = {"ok": False}
+        frame = ttk.Frame(window, padding=14)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+        ttk.Label(frame, text="是否用以下设置继续？", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        text = Text(frame, wrap="word", background=self.COLORS["entry_bg"], foreground=self.COLORS["text"], font=("Microsoft YaHei UI", 10), height=18)
+        text.grid(row=1, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns")
+        text.configure(yscrollcommand=scrollbar.set)
+        text.insert("1.0", summary)
+        text.configure(state="disabled")
+
+        actions = ttk.Frame(frame)
+        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        actions.columnconfigure((0, 1), weight=1)
+
+        def confirm():
+            result["ok"] = True
+            window.destroy()
+
+        ttk.Button(actions, text=f"是，{action_text}", style="Accent.TButton", command=confirm).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(actions, text="取消", command=window.destroy).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        window.bind("<Return>", lambda event: confirm())
+        window.bind("<Escape>", lambda event: window.destroy())
+        window.wait_window()
+        return result["ok"]
+
     def _start_worker(self, task_name, target, *args):
         self.stop_requested = False
         self.progress.set(0)
@@ -4787,6 +5210,7 @@ class VideoCompressorApp:
             audio_mode=self.audio_mode.get(),
             audio_bitrate=self.audio_bitrate.get(),
             muxer_name=self.muxer_name.get(),
+            output_speed=self.output_speed.get(),
             thumbnail_time=self.thumbnail_time.get(),
             overwrite=self.file_conflict_action.get() == "覆盖",
             use_lut=self.use_lut.get(),
@@ -5039,7 +5463,10 @@ class VideoCompressorApp:
             "-i",
             str(source_path),
             "-map",
-            "0",
+            "0:v?",
+            "-map",
+            "0:a?",
+            "-dn",
             "-c:v",
             encoder,
         ]
@@ -5118,6 +5545,7 @@ class VideoCompressorApp:
             audio_mode=settings.audio_mode,
             audio_bitrate=settings.audio_bitrate,
             muxer_name=settings.muxer_name,
+            output_speed=settings.output_speed,
             thumbnail_time=settings.thumbnail_time,
             overwrite=True,
             use_lut=settings.use_lut,
@@ -5139,6 +5567,7 @@ class VideoCompressorApp:
             self.messages.put(("log", f"CPU H.264 回退编码成功：{source_path.name}"))
         else:
             self.messages.put(("log", f"CPU H.264 回退编码失败：{source_path.name}"))
+            self.messages.put(("suggest_video_defaults", source_path.name))
         return ok
 
     def _run_two_pass(self, source_path, target, settings, job_id=None):
@@ -5702,6 +6131,7 @@ class VideoCompressorApp:
             audio_mode=preset["audio"],
             audio_bitrate=preset["audio_bitrate"],
             muxer_name=preset["muxer"],
+            output_speed=self.output_speed.get(),
             thumbnail_time=self.thumbnail_time.get(),
             overwrite=self.file_conflict_action.get() == "覆盖",
             use_lut=self.use_lut.get(),
@@ -5963,13 +6393,26 @@ class VideoCompressorApp:
 
     def _poll_resources(self):
         cpu = self._cpu_usage_percent()
-        gpu = self._gpu_usage_percent()
+        self._ensure_gpu_usage_poll()
+        gpu = self._last_gpu_usage
         cpu_text = "--" if cpu is None else f"{cpu:.0f}"
         gpu_text = "--" if gpu is None else f"{gpu:.0f}"
         self.resource_status.set(f"CPU {cpu_text}%  |  GPU {gpu_text}%")
         self._append_resource_history(cpu, gpu)
         self._draw_resource_chart()
-        self.root.after(1000, self._poll_resources)
+        self.root.after(1500, self._poll_resources)
+
+    def _ensure_gpu_usage_poll(self):
+        if self._gpu_poll_running:
+            return
+        self._gpu_poll_running = True
+        threading.Thread(target=self._gpu_usage_worker, daemon=True).start()
+
+    def _gpu_usage_worker(self):
+        try:
+            self._last_gpu_usage = self._gpu_usage_percent()
+        finally:
+            self._gpu_poll_running = False
 
     def _append_resource_history(self, cpu, gpu):
         self.cpu_history.append(0 if cpu is None else max(0, min(100, cpu)))
@@ -6065,7 +6508,7 @@ class VideoCompressorApp:
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=3,
+                    timeout=1,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
                 values = [float(value) for value in re.findall(r"[-+]?\d+(?:\.\d+)?", output)]
@@ -6076,11 +6519,13 @@ class VideoCompressorApp:
         return None
 
     def _poll_messages(self):
-        while True:
+        processed = 0
+        while processed < 80:
             try:
                 kind, payload = self.messages.get_nowait()
             except queue.Empty:
                 break
+            processed += 1
             if kind == "log":
                 if not self.multi_job_mode:
                     self._log(payload)
@@ -6114,6 +6559,8 @@ class VideoCompressorApp:
                 self._update_benchmark_result(payload)
             elif kind == "benchmark_done":
                 self._finish_benchmark(payload)
+            elif kind == "environment_update":
+                self._apply_environment_update(payload)
             elif kind == "preview":
                 self._show_preview(payload)
             elif kind == "anamorphic_preview":
@@ -6126,11 +6573,59 @@ class VideoCompressorApp:
             elif kind == "lut_item":
                 name, path = payload
                 self._add_lut_thumbnail(name, path)
-        self.root.after(120, self._poll_messages)
+            elif kind == "suggest_video_defaults":
+                self._prompt_restore_video_defaults(payload)
+        delay = 30 if not self.messages.empty() else 120
+        self.root.after(delay, self._poll_messages)
 
     def _log(self, text):
         self.log.insert(END, text)
         self.log.yview_moveto(1)
+
+    def _prompt_restore_video_defaults(self, source_name):
+        if self._restore_video_defaults_prompt_open:
+            return
+        self._restore_video_defaults_prompt_open = True
+        try:
+            message = (
+                f"{source_name} 使用 CPU H.264 兜底仍然导出失败。\n\n"
+                "这可能是当前压缩参数、滤镜、音频模式或自定义 x264 参数导致的。\n"
+                "是否恢复视频压缩默认设置后再尝试？"
+            )
+            if messagebox.askyesno("导出失败", message):
+                self._restore_video_compression_defaults()
+                self._save_app_settings()
+                self._log("已恢复视频压缩默认设置。")
+        finally:
+            self._restore_video_defaults_prompt_open = False
+
+    def _restore_video_compression_defaults(self):
+        self.encoder_name.set("GPU H.265 / HEVC (hevc_nvenc)")
+        self.advanced_encoders.set(False)
+        self.preset_name.set("高速")
+        self.resolution_name.set("保持原分辨率")
+        self.sharpen_name.set("关闭")
+        self.custom_width.set(1920)
+        self.custom_height.set(1080)
+        self.quality_mode.set("CRF / 恒定质量")
+        self.cq_value.set(23)
+        self.bitrate.set("")
+        self.custom_command.set('-y -i "{input}" -c:v libx264 -crf 23 -c:a copy "{output}"')
+        self.audio_mode.set("复制音频流")
+        self.audio_bitrate.set("160k")
+        self.muxer_name.set("MP4 (.mp4)")
+        self.output_speed.set(1.0)
+        self.extra_ffmpeg_args.set("")
+        self.use_lut.set(False)
+        self.lut_path.set("")
+        self.hidden_watermark_enabled.set(False)
+        self.hidden_watermark_mode.set("text")
+        self.hidden_watermark_text.set("")
+        self.hidden_watermark_image.set("")
+        self.x264_threads.set(0)
+        self.x264_command.set("")
+        self.auto_fallback_cpu_h264.set(True)
+        self.refresh_encoder_choices()
 
     def _start_multi_job_mode(self, total):
         self.multi_job_mode = total > 1
@@ -6177,7 +6672,7 @@ class VideoCompressorApp:
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title(f"任务进度 - {title}")
-        window.geometry("760x360")
+        self._set_window_geometry(window, "760x360")
         window.minsize(520, 260)
         box = ttk.Frame(window, padding=12)
         box.pack(fill="both", expand=True)
@@ -6282,7 +6777,7 @@ class VideoCompressorApp:
             self.anamorphic_preview_window = Toplevel(self.root)
             self._set_window_icon(self.anamorphic_preview_window)
             self.anamorphic_preview_window.title("变形预览帧")
-            self.anamorphic_preview_window.geometry("960x540")
+            self._set_window_geometry(self.anamorphic_preview_window, "960x540")
             self.anamorphic_preview_window.columnconfigure(0, weight=1)
             self.anamorphic_preview_window.rowconfigure(0, weight=1)
             self.anamorphic_preview_label = ttk.Label(self.anamorphic_preview_window, anchor="center")
@@ -6333,11 +6828,12 @@ class VideoCompressorApp:
         self.lut_tooltip_after = self.root.after(1000, lambda: self._show_lut_tooltip(text, x, y))
 
     def _show_lut_tooltip(self, text, x, y):
+        metrics = self._ui_metrics()
         self._hide_lut_tooltip(cancel_after=False)
         tip = Toplevel(self.root)
         tip.wm_overrideredirect(True)
         tip.wm_geometry(f"+{x}+{y}")
-        ttk.Label(tip, text=text, padding=(8, 5), relief="solid").pack()
+        ttk.Label(tip, text=text, padding=metrics["entry_pad"], relief="solid").pack()
         self.lut_tooltip = tip
 
     def _hide_lut_tooltip(self, cancel_after=True):
@@ -6686,6 +7182,7 @@ def run_app():
         crash_log = Path.cwd() / "crash.log"
         crash_log.write_text(traceback.format_exc(), encoding="utf-8")
         raise
+
 
 
 

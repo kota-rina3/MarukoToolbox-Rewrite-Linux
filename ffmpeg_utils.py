@@ -37,7 +37,7 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
     preset_gpu, preset_cpu = PRESETS[settings.preset_name]
     cq = str(settings.cq_value)
     bitrate = settings.bitrate.strip()
-    use_cpu_filters = has_lut(settings) or has_sharpen(settings)
+    use_cpu_filters = has_lut(settings) or has_sharpen(settings) or has_speed_change(settings)
 
     cmd = [ffmpeg, "-hide_banner", "-y" if settings.overwrite or benchmark else "-n"]
     if is_nvenc and not use_cpu_filters:
@@ -376,11 +376,19 @@ def output_suffix(source: Path, muxer_name):
 
 def audio_args(settings: CompressionSettings):
     mode = AUDIO_MODES[settings.audio_mode]
+    speed = normalized_speed(settings)
     if mode == "copy":
+        if speed != 1.0:
+            args = ["-af", audio_speed_filter(speed), "-c:a", "aac"]
+            if settings.audio_bitrate.strip():
+                args += ["-b:a", settings.audio_bitrate.strip()]
+            return args
         return ["-c:a", "copy"]
     if mode == "none":
         return ["-an"]
     args = ["-c:a", mode]
+    if speed != 1.0:
+        args = ["-af", audio_speed_filter(speed)]
     if settings.audio_bitrate.strip() and mode != "flac":
         args += ["-b:a", settings.audio_bitrate.strip()]
     return args
@@ -413,6 +421,9 @@ def video_filters(settings: CompressionSettings, use_gpu_filters: bool):
         filters.append(f"lut3d=file='{filter_path(settings.lut_path)}'")
     if has_sharpen(settings):
         filters.append(SHARPEN_LEVELS[settings.sharpen_name])
+    speed = normalized_speed(settings)
+    if speed != 1.0:
+        filters.append(f"setpts=PTS/{format_filter_number(speed)}")
     return filters
 
 
@@ -444,6 +455,37 @@ def has_lut(settings: CompressionSettings):
 
 def has_sharpen(settings: CompressionSettings):
     return bool(SHARPEN_LEVELS.get(settings.sharpen_name))
+
+
+def normalized_speed(settings: CompressionSettings):
+    try:
+        speed = float(settings.output_speed)
+    except Exception:
+        return 1.0
+    if speed <= 0:
+        return 1.0
+    return speed
+
+
+def has_speed_change(settings: CompressionSettings):
+    return normalized_speed(settings) != 1.0
+
+
+def audio_speed_filter(speed: float):
+    factors = []
+    remaining = speed
+    while remaining > 2.0:
+        factors.append(2.0)
+        remaining /= 2.0
+    while remaining < 0.5:
+        factors.append(0.5)
+        remaining /= 0.5
+    factors.append(remaining)
+    return ",".join(f"atempo={format_filter_number(factor)}" for factor in factors)
+
+
+def format_filter_number(value: float):
+    return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
 def filter_path(path: str):
