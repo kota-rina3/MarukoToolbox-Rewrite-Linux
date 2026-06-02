@@ -298,6 +298,7 @@ class VideoCompressorApp:
         self._last_gpu_usage = None
         self._gpu_poll_running = False
         self._scrollregion_jobs = {}
+        self._scrollregion_cache = {}
         self._scrollable_canvases = []
         self._restore_video_defaults_prompt_open = False
         self.cpu_history = []
@@ -654,9 +655,14 @@ class VideoCompressorApp:
             pass
 
     def _set_window_geometry(self, window, geometry, center=True):
-        window.geometry(geometry)
         if center:
-            window.after_idle(lambda w=window: self._center_window_on_parent(w))
+            window.withdraw()
+            window.geometry(geometry)
+            window.update_idletasks()
+            self._center_window_on_parent(window)
+            window.deiconify()
+        else:
+            window.geometry(geometry)
 
     def _center_window_on_parent(self, window, parent=None):
         parent = parent or self.root
@@ -868,7 +874,7 @@ class VideoCompressorApp:
                 self.notebook.add(frame, text=name)
 
     def _on_notebook_tab_changed(self, _event=None):
-        self.root.after_idle(self._refresh_visible_scrollregions)
+        self.root.after(16, self._refresh_visible_scrollregions)
 
     def _refresh_visible_scrollregions(self):
         current = self.notebook.select() if hasattr(self, "notebook") else ""
@@ -1456,8 +1462,8 @@ class VideoCompressorApp:
         result.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
         result.columnconfigure(0, weight=1)
         result.rowconfigure(0, weight=1)
-        self.lut_result_canvas = Canvas(result, height=170, bg=self.COLORS["surface_alt"], highlightthickness=1, highlightbackground=self.COLORS["panel_border"])
-        self.lut_result_canvas.grid(row=0, column=0, sticky="ew")
+        self.lut_result_canvas = Canvas(result, height=240, bg=self.COLORS["surface_alt"], highlightthickness=1, highlightbackground=self.COLORS["panel_border"])
+        self.lut_result_canvas.grid(row=0, column=0, sticky="nsew")
         lut_scroll = ttk.Scrollbar(result, orient="horizontal", command=self.lut_result_canvas.xview)
         lut_scroll.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         self.lut_result_canvas.configure(xscrollcommand=lut_scroll.set)
@@ -1630,7 +1636,11 @@ class VideoCompressorApp:
         if not canvas.winfo_exists():
             return
         try:
-            canvas.configure(scrollregion=canvas.bbox("all"))
+            bbox = canvas.bbox("all")
+            if self._scrollregion_cache.get(canvas) == bbox:
+                return
+            self._scrollregion_cache[canvas] = bbox
+            canvas.configure(scrollregion=bbox)
         except Exception:
             pass
 
@@ -3472,13 +3482,13 @@ class VideoCompressorApp:
         window = Toplevel(self.root)
         self._set_window_icon(window)
         window.title("加载预设")
-        self._set_window_geometry(window, "980x420")
+        self._set_window_geometry(window, "940x420")
         window.minsize(860, 340)
         box = ttk.Frame(window, padding=16)
         box.pack(fill="both", expand=True)
-        box.columnconfigure(0, weight=2)
-        box.columnconfigure(1, weight=3)
-        box.columnconfigure(2, weight=2)
+        box.columnconfigure(0, weight=3)
+        box.columnconfigure(1, weight=2)
+        box.columnconfigure(2, weight=3)
         box.rowconfigure(1, weight=1)
 
         ttk.Label(box, text="用户预设").grid(row=0, column=0, sticky="w")
@@ -3504,6 +3514,7 @@ class VideoCompressorApp:
             preview_box,
             wrap="word",
             height=12,
+            width=28,
             background=self.COLORS["entry_bg"],
             foreground=self.COLORS["text"],
             insertbackground=self.COLORS["text"],
@@ -6810,6 +6821,7 @@ class VideoCompressorApp:
             image = PhotoImage(file=path)
         except Exception:
             return
+        image = self._fit_lut_thumbnail_image(image)
         self.lut_thumb_images[name] = image
         item = ttk.Frame(self.lut_result_strip, padding=(8, 8))
         item.pack(side="left", padx=(0, 8), pady=6)
@@ -6820,6 +6832,21 @@ class VideoCompressorApp:
         for widget in (item, label):
             widget.bind("<Enter>", lambda event, text=name: self._schedule_lut_tooltip(event, text))
             widget.bind("<Leave>", lambda event: self._hide_lut_tooltip())
+
+    def _fit_lut_thumbnail_image(self, image, max_width=320, max_height=180):
+        try:
+            width = max(int(image.width()), 1)
+            height = max(int(image.height()), 1)
+        except Exception:
+            return image
+        scale = max(width / max_width, height / max_height, 1)
+        if scale <= 1:
+            return image
+        factor = max(1, int(scale + 0.999))
+        try:
+            return image.subsample(factor, factor)
+        except Exception:
+            return image
 
     def _schedule_lut_tooltip(self, event, text):
         self._hide_lut_tooltip()
