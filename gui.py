@@ -35,6 +35,15 @@ from tkinter import (
 )
 
 import ffmpeg_utils as ffmpeg
+import GUI_audio
+import GUI_avs
+import GUI_common
+import GUI_lut
+import GUI_mediainfo
+import GUI_settings
+import GUI_subtitle
+import GUI_tasks
+import GUI_video
 from config import (
     APP_TITLE,
     BUILD_VERSION,
@@ -179,7 +188,7 @@ class VideoCompressorApp:
         self.root.title(self.display_title)
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(*WINDOW_MIN_SIZE)
-        self.icon_path = Path.cwd() / "gzya5-3b5gl-001.ico"
+        self.icon_path = ffmpeg.preferred_icon_path("gzya5-3b5gl-001.ico")
         self._set_window_icon(self.root)
 
         self.files = []
@@ -258,6 +267,14 @@ class VideoCompressorApp:
         self.common_trim_encoder = StringVar(value="CPU H.264 / AVC (libx264)")
         self.common_trim_muxer = StringVar(value="MP4 (.mp4)")
         self.common_channel_copy_mode = StringVar(value="左复制到右")
+        self.common_slideshow_images = []
+        self.common_slideshow_images_text = StringVar(value="")
+        self.common_slideshow_audio = StringVar(value="")
+        self.common_slideshow_image_duration = DoubleVar(value=5.0)
+        self.common_slideshow_fps = IntVar(value=30)
+        self.common_slideshow_encoder = StringVar(value="CPU H.264 / AVC (libx264)")
+        self.common_slideshow_resolution = StringVar(value="1080p")
+        self.common_slideshow_fill_mode = StringVar(value="完整显示留黑边")
         self.anamorphic_output_dir = StringVar(value=str(self._default_output_dir("anamorphic")))
         self.anamorphic_factor = StringVar(value="1.33")
         self.anamorphic_mode = StringVar(value="保留反挤压宽画幅")
@@ -895,14 +912,12 @@ class VideoCompressorApp:
                 self._schedule_scrollregion_update(canvas)
 
     def _build_video_tab(self, parent):
-        panel = self._scrollable_frame(parent)
-        panel.columnconfigure(0, weight=3)
-        panel.columnconfigure(1, weight=2)
-        panel.rowconfigure(0, weight=1)
-        self._build_video_file_panel(panel)
-        self._build_settings_panel(panel)
+        GUI_video.build_video_tab(self, parent)
 
     def _build_common_tab(self, parent):
+        return GUI_common.build_common_tab(self, parent)
+
+    def _build_common_tab_legacy(self, parent):
         parent = self._scrollable_frame(parent)
         parent.columnconfigure(0, weight=1)
         trim = ttk.LabelFrame(parent, text="截取视频", padding=12)
@@ -941,52 +956,55 @@ class VideoCompressorApp:
         ttk.Button(action_row, text="复制左右声道", command=self.start_common_channel_copy).grid(row=0, column=1, sticky="ew", padx=(6, 0))
         ttk.Label(tools, text="使用上方“视频文件”和“输出目录”；支持从视频提取音频或复制单侧声道。", style="Hint.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
+        slideshow = ttk.LabelFrame(parent, text="一图流", padding=12)
+        slideshow.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        slideshow.columnconfigure(1, weight=1)
+        ttk.Label(slideshow, text="图片").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Entry(slideshow, textvariable=self.common_slideshow_images_text).grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Button(slideshow, text="选择…", command=self.choose_common_slideshow_images).grid(row=0, column=2, pady=5)
+        image_list_box = ttk.Frame(slideshow)
+        image_list_box.grid(row=1, column=1, sticky="nsew", padx=8, pady=(0, 5))
+        image_list_box.columnconfigure(0, weight=1)
+        image_list_box.rowconfigure(0, weight=1)
+        self.common_slideshow_image_list = self._create_work_listbox(image_list_box, exportselection=False, height=5)
+        self.common_slideshow_image_list.grid(row=0, column=0, sticky="nsew")
+        image_scroll = ttk.Scrollbar(image_list_box, orient="vertical", command=self.common_slideshow_image_list.yview)
+        image_scroll.grid(row=0, column=1, sticky="ns")
+        self.common_slideshow_image_list.configure(yscrollcommand=image_scroll.set)
+        image_actions = ttk.Frame(slideshow)
+        image_actions.grid(row=1, column=2, sticky="ns", pady=(0, 5))
+        ttk.Button(image_actions, text="上移", command=self.move_common_slideshow_image_up).pack(fill="x")
+        ttk.Button(image_actions, text="下移", command=self.move_common_slideshow_image_down).pack(fill="x", pady=4)
+        ttk.Button(image_actions, text="删除", command=self.remove_common_slideshow_images).pack(fill="x")
+        ttk.Label(slideshow, text="音频").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Entry(slideshow, textvariable=self.common_slideshow_audio).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Button(slideshow, text="选择…", command=self.choose_common_slideshow_audio).grid(row=2, column=2, pady=5)
+        ttk.Label(slideshow, text="单张停留").grid(row=3, column=0, sticky="w", pady=5)
+        slideshow_time_row = ttk.Frame(slideshow)
+        slideshow_time_row.grid(row=3, column=1, sticky="w", padx=8, pady=5)
+        ttk.Spinbox(slideshow_time_row, from_=0.5, to=3600, increment=0.5, width=10, textvariable=self.common_slideshow_image_duration).pack(side="left")
+        ttk.Label(slideshow_time_row, text="秒").pack(side="left", padx=(6, 0))
+        ttk.Label(slideshow, text="输出分辨率").grid(row=4, column=0, sticky="w", pady=5)
+        ttk.Combobox(slideshow, textvariable=self.common_slideshow_resolution, values=["保持首图尺寸", "720p", "1080p", "1440p", "2160p"], state="readonly").grid(row=4, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Label(slideshow, text="画面模式").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Combobox(slideshow, textvariable=self.common_slideshow_fill_mode, values=["完整显示留黑边", "铺满裁切", "直接拉伸"], state="readonly").grid(row=5, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Label(slideshow, text="编码器").grid(row=6, column=0, sticky="w", pady=5)
+        ttk.Combobox(slideshow, textvariable=self.common_slideshow_encoder, values=self._filtered_encoder_list(list(COMMON_ENCODERS)), state="readonly").grid(row=6, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Label(slideshow, text="帧率").grid(row=7, column=0, sticky="w", pady=5)
+        ttk.Spinbox(slideshow, from_=1, to=120, increment=1, width=10, textvariable=self.common_slideshow_fps).grid(row=7, column=1, sticky="w", padx=8, pady=5)
+        ttk.Button(slideshow, text="▶ 生成一图流", style="Accent.TButton", command=self.start_common_slideshow).grid(row=8, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        ttk.Label(slideshow, text="支持单图或多图循环，音频播完后自动结束；可调整图片顺序、分辨率和显示模式。", style="Hint.TLabel").grid(row=9, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
     def _build_video_file_panel(self, parent):
-        panel = ttk.LabelFrame(parent, text="任务列表", padding=12)
-        panel.grid(row=0, column=0, sticky="new", padx=(0, 10))
-        panel.rowconfigure(2, weight=0)
-        panel.columnconfigure(0, weight=1)
-
-        toolbar = ttk.Frame(panel)
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        self.video_add_button = ttk.Button(toolbar, text="＋ 添加视频", command=self.add_files)
-        self.video_add_button.pack(side="left")
-        ttk.Button(toolbar, text="▤ 添加文件夹", command=self.add_folder).pack(side="left", padx=6)
-        ttk.Button(toolbar, text="▶ 预览", command=self.open_player_preview).pack(side="left")
-        ttk.Button(toolbar, text="− 移除", command=self.remove_selected).pack(side="left", padx=(6, 0))
-        ttk.Button(toolbar, text="清空", command=self.clear_files).pack(side="left", padx=6)
-
-        output = ttk.Frame(panel)
-        output.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        output.columnconfigure(1, weight=1)
-        self.video_output_dir_button = ttk.Button(output, text="输出目录", style="OutputDir.TButton", command=lambda: self.open_output_dir(self.output_dir))
-        self.video_output_dir_button.grid(row=0, column=0, sticky="w")
-        ttk.Entry(output, textvariable=self.output_dir).grid(row=0, column=1, sticky="ew", padx=8)
-        self.video_output_browse_button = ttk.Button(output, text="浏览…", command=self.choose_output_dir)
-        self.video_output_browse_button.grid(row=0, column=2)
-
-        list_frame = ttk.Frame(panel)
-        list_frame.grid(row=2, column=0, sticky="ew")
-        list_frame.rowconfigure(0, weight=0)
-        list_frame.columnconfigure(0, weight=1)
-        self.file_list = self._create_work_listbox(list_frame, selectmode="extended", height=self._video_task_list_height())
-        self.file_list.grid(row=0, column=0, sticky="ew")
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.file_list.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.file_list.configure(yscrollcommand=scrollbar.set)
+        GUI_video.build_video_file_panel(self, parent)
 
     def _video_task_list_height(self):
-        try:
-            screen_height = self.root.winfo_screenheight()
-        except Exception:
-            screen_height = 1080
-        if screen_height <= 1200:
-            return 7
-        if screen_height <= 1800:
-            return 9
-        return 11
+        return GUI_video.video_task_list_height(self)
 
     def _build_subtitle_tab(self, parent):
+        return GUI_subtitle.build_subtitle_tab(self, parent)
+
+    def _build_subtitle_tab_legacy(self, parent):
         parent = self._scrollable_frame(parent)
         parent.columnconfigure(0, weight=3)
         parent.columnconfigure(1, weight=2)
@@ -1040,6 +1058,9 @@ class VideoCompressorApp:
         ttk.Label(ops, text="双击轨道可决定是否保留；导入的字幕会放进新视频文件里。", style="Hint.TLabel").grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
     def _build_avs_tab(self, parent):
+        return GUI_avs.build_avs_tab(self, parent)
+
+    def _build_avs_tab_legacy(self, parent):
         parent = self._scrollable_frame(parent)
         parent.columnconfigure(0, weight=1)
 
@@ -1146,6 +1167,9 @@ class VideoCompressorApp:
         ttk.Spinbox(parent, from_=0, to=999999, increment=1, width=7, textvariable=variable).pack(side="left")
 
     def _build_settings_panel(self, parent):
+        return GUI_settings.build_settings_panel(self, parent)
+
+    def _build_settings_panel_legacy(self, parent):
         panel = ttk.LabelFrame(parent, text="压缩设置", padding=12)
         panel.grid(row=0, column=1, sticky="nsew")
         panel.columnconfigure(1, weight=1)
@@ -1300,6 +1324,9 @@ class VideoCompressorApp:
         ttk.Label(settings, text="适合手机外接变形镜头、微单变形镜头和素材反挤压归档。", style="Hint.TLabel").grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
     def _build_audio_tab(self, parent):
+        return GUI_audio.build_audio_tab(self, parent)
+
+    def _build_audio_tab_legacy(self, parent):
         parent = self._scrollable_frame(parent)
         parent.columnconfigure(0, weight=3)
         parent.columnconfigure(1, weight=2)
@@ -1440,38 +1467,12 @@ class VideoCompressorApp:
         ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(12, 0))
 
     def _build_lut_tab(self, parent):
-        parent = self._scrollable_frame(parent)
-        parent.columnconfigure(0, weight=1)
-        setup = ttk.LabelFrame(parent, text="LUT 批量缩略图对比", padding=12)
-        setup.grid(row=0, column=0, sticky="ew")
-        setup.columnconfigure(1, weight=1)
-        ttk.Label(setup, text="视频文件").grid(row=0, column=0, sticky="w", pady=5)
-        ttk.Entry(setup, textvariable=self.lut_page_video).grid(row=0, column=1, sticky="ew", padx=8)
-        ttk.Button(setup, text="选择…", command=self.choose_lut_page_video).grid(row=0, column=2)
-        ttk.Label(setup, text="LUT 文件夹").grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Entry(setup, textvariable=self.lut_page_folder).grid(row=1, column=1, sticky="ew", padx=8)
-        ttk.Button(setup, text="选择…", command=self.choose_lut_page_folder).grid(row=1, column=2)
-        ttk.Button(setup, text="输出目录", style="OutputDir.TButton", command=lambda: self.open_output_dir(self.lut_page_output)).grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Entry(setup, textvariable=self.lut_page_output).grid(row=2, column=1, sticky="ew", padx=8)
-        ttk.Button(setup, text="选择…", command=self.choose_lut_page_output).grid(row=2, column=2)
-        ttk.Label(setup, text="取帧时间").grid(row=3, column=0, sticky="w", pady=5)
-        ttk.Spinbox(setup, from_=0, to=3600, increment=0.5, textvariable=self.lut_page_time).grid(row=3, column=1, sticky="ew", padx=8)
-        ttk.Button(setup, text="▶ 生成所有 LUT 缩略图", style="Accent.TButton", command=self.start_lut_folder_preview).grid(row=4, column=0, columnspan=3, sticky="ew", pady=(12, 0))
-
-        result = ttk.LabelFrame(parent, text="缩略图结果", padding=12)
-        result.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
-        result.columnconfigure(0, weight=1)
-        result.rowconfigure(0, weight=1)
-        self.lut_result_canvas = Canvas(result, height=240, bg=self.COLORS["surface_alt"], highlightthickness=1, highlightbackground=self.COLORS["panel_border"])
-        self.lut_result_canvas.grid(row=0, column=0, sticky="nsew")
-        lut_scroll = ttk.Scrollbar(result, orient="horizontal", command=self.lut_result_canvas.xview)
-        lut_scroll.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        self.lut_result_canvas.configure(xscrollcommand=lut_scroll.set)
-        self.lut_result_strip = ttk.Frame(self.lut_result_canvas)
-        self.lut_result_window = self.lut_result_canvas.create_window((0, 0), window=self.lut_result_strip, anchor="nw")
-        self.lut_result_strip.bind("<Configure>", lambda event: self.lut_result_canvas.configure(scrollregion=self.lut_result_canvas.bbox("all")))
+        GUI_lut.build_lut_tab(self, parent)
 
     def _build_mediainfo_tab(self, parent):
+        return GUI_mediainfo.build_mediainfo_tab(self, parent)
+
+    def _build_mediainfo_tab_legacy(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(1, weight=1)
         toolbar = ttk.LabelFrame(parent, text="媒体信息", padding=12)
@@ -1566,6 +1567,9 @@ class VideoCompressorApp:
         return [name for name in encoders if self._encoder_visible(name)]
 
     def _build_tasks_tab(self, parent):
+        return GUI_tasks.build_tasks_tab(self, parent)
+
+    def _build_tasks_tab_legacy(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=1)
         panel = ttk.LabelFrame(parent, text="任务队列", padding=12)
@@ -1662,7 +1666,29 @@ class VideoCompressorApp:
         canvas.yview_scroll(units, "units")
         return "break"
 
+    def _redirect_widget_mousewheel(self, event):
+        units = self._mousewheel_units(event)
+        if not units:
+            return "break"
+        parent = event.widget
+        while parent is not None:
+            if isinstance(parent, Canvas):
+                parent.yview_scroll(units, "units")
+                return "break"
+            parent = getattr(parent, "master", None)
+        return "break"
+
+    def _ensure_widget_mousewheel_guards(self):
+        if getattr(self, "_mousewheel_guards_ready", False):
+            return
+        for class_name in ("TCombobox", "Combobox", "TSpinbox", "Spinbox"):
+            self.root.bind_class(class_name, "<MouseWheel>", self._redirect_widget_mousewheel)
+            self.root.bind_class(class_name, "<Button-4>", self._redirect_widget_mousewheel)
+            self.root.bind_class(class_name, "<Button-5>", self._redirect_widget_mousewheel)
+        self._mousewheel_guards_ready = True
+
     def _bind_canvas_wheel(self, canvas):
+        self._ensure_widget_mousewheel_guards()
         callback = getattr(canvas, "_wheel_callback", None)
         if callback is not None:
             return
@@ -1803,6 +1829,8 @@ class VideoCompressorApp:
         self._rebuild_settings_panel()
 
     def _add_encoder_controls(self, panel, row):
+        ttk.Label(panel, text="需要更多编码器？点击高级模式。", style="Hint.TLabel").grid(row=row, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        row += 1
         ttk.Label(panel, text="编码器").grid(row=row, column=0, sticky="w", pady=5)
         encoder_row = ttk.Frame(panel)
         encoder_row.grid(row=row, column=1, sticky="ew", pady=5)
@@ -1906,6 +1934,9 @@ class VideoCompressorApp:
         return row + 1
 
     def _sync_custom_size_state(self):
+        return GUI_settings.sync_custom_size_state(self)
+
+    def _sync_custom_size_state_legacy(self):
         width_spin = getattr(self, "custom_width_spin", None)
         height_spin = getattr(self, "custom_height_spin", None)
         if not width_spin or not height_spin:
@@ -2380,6 +2411,9 @@ class VideoCompressorApp:
         return normalized
 
     def _builtin_video_presets(self):
+        return GUI_settings.builtin_video_presets(self)
+
+    def _builtin_video_presets_legacy(self):
         presets = {}
         for name, item in BATCH_PRESETS.items():
             presets[name] = {
@@ -3294,9 +3328,28 @@ class VideoCompressorApp:
             self.output_dir.set(folder)
 
     def choose_common_trim_video(self):
-        path = filedialog.askopenfilename(title="选择要截取的视频", filetypes=VIDEO_FILETYPES)
-        if path:
-            self.common_trim_video.set(path)
+        return GUI_common.choose_common_trim_video(self)
+
+    def choose_common_slideshow_images(self):
+        return GUI_common.choose_common_slideshow_images(self)
+
+    def choose_common_slideshow_audio(self):
+        return GUI_common.choose_common_slideshow_audio(self)
+
+    def _refresh_common_slideshow_images(self, selection_index=None):
+        return GUI_common.refresh_common_slideshow_images(self, selection_index)
+
+    def remove_common_slideshow_images(self):
+        return GUI_common.remove_common_slideshow_images(self)
+
+    def move_common_slideshow_image_up(self):
+        return GUI_common.move_common_slideshow_image_up(self)
+
+    def move_common_slideshow_image_down(self):
+        return GUI_common.move_common_slideshow_image_down(self)
+
+    def _move_common_slideshow_image(self, direction):
+        return GUI_common.move_common_slideshow_image(self, direction)
 
     def choose_common_output_dir(self):
         folder = filedialog.askdirectory(title="选择常用功能输出目录")
@@ -3479,149 +3532,15 @@ class VideoCompressorApp:
             self.user_preset_list.activate(select_index)
 
     def load_video_preset(self):
-        window = Toplevel(self.root)
-        self._set_window_icon(window)
-        window.title("加载预设")
-        self._set_window_geometry(window, "940x420")
-        window.minsize(860, 340)
-        box = ttk.Frame(window, padding=16)
-        box.pack(fill="both", expand=True)
-        box.columnconfigure(0, weight=3)
-        box.columnconfigure(1, weight=2)
-        box.columnconfigure(2, weight=3)
-        box.rowconfigure(1, weight=1)
-
-        ttk.Label(box, text="用户预设").grid(row=0, column=0, sticky="w")
-        ttk.Label(box, text="主要参数预览").grid(row=0, column=1, sticky="w", padx=(8, 8))
-        ttk.Label(box, text="内置预设").grid(row=0, column=2, sticky="w")
-
-        user_box = ttk.Frame(box)
-        user_box.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
-        user_box.columnconfigure(0, weight=1)
-        user_box.rowconfigure(0, weight=1)
-        user_list = self._create_work_listbox(user_box, exportselection=False)
-        user_list.grid(row=0, column=0, sticky="nsew")
-        for item in self.user_video_presets:
-            user_list.insert(END, item["name"])
-        if self.user_video_presets:
-            user_list.selection_set(0)
-
-        preview_box = ttk.Frame(box)
-        preview_box.grid(row=1, column=1, sticky="nsew", padx=8)
-        preview_box.columnconfigure(0, weight=1)
-        preview_box.rowconfigure(0, weight=1)
-        preview_text = Text(
-            preview_box,
-            wrap="word",
-            height=12,
-            width=28,
-            background=self.COLORS["entry_bg"],
-            foreground=self.COLORS["text"],
-            insertbackground=self.COLORS["text"],
-            relief="solid",
-            borderwidth=1,
-            font=("Microsoft YaHei UI", self._ui_metrics()["font"]),
-            padx=10,
-            pady=8,
-        )
-        preview_text.grid(row=0, column=0, sticky="nsew")
-        preview_scroll = ttk.Scrollbar(preview_box, orient="vertical", command=preview_text.yview)
-        preview_scroll.grid(row=0, column=1, sticky="ns")
-        preview_text.configure(yscrollcommand=preview_scroll.set, state="disabled")
-
-        builtin_names = list(self._builtin_video_presets())
-        builtin_box = ttk.Frame(box)
-        builtin_box.grid(row=1, column=2, sticky="nsew", padx=(8, 0))
-        builtin_box.columnconfigure(0, weight=1)
-        builtin_box.rowconfigure(0, weight=1)
-        builtin_list = self._create_work_listbox(builtin_box, exportselection=False)
-        builtin_list.grid(row=0, column=0, sticky="nsew")
-        for name in builtin_names:
-            builtin_list.insert(END, name)
-        if builtin_names:
-            builtin_list.selection_set(0)
-
-        actions = ttk.Frame(box)
-        actions.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 0))
-        actions.columnconfigure((0, 1), weight=1)
-
-        def refresh_user_preview(_event=None):
-            selection = user_list.curselection()
-            if selection:
-                preset = self.user_video_presets[selection[0]]
-                text = self._format_preset_preview(preset["settings"])
-            else:
-                text = "暂无用户预设。"
-            preview_text.configure(state="normal")
-            preview_text.delete("1.0", END)
-            preview_text.insert("1.0", text)
-            preview_text.configure(state="disabled")
-
-        user_list.bind("<<ListboxSelect>>", refresh_user_preview)
-        refresh_user_preview()
-
-        def apply_user_preset():
-            selection = user_list.curselection()
-            if not selection:
-                messagebox.showwarning("没有选择", "请先选择一个用户预设。")
-                return
-            preset = self.user_video_presets[selection[0]]
-            self._apply_video_settings_dict(preset["settings"])
-            self._log(f"已加载用户预设：{preset['name']}")
-            window.destroy()
-
-        def apply_builtin_preset():
-            selection = builtin_list.curselection()
-            if not selection:
-                messagebox.showwarning("没有选择", "请先选择一个内置预设。")
-                return
-            name = builtin_names[selection[0]]
-            preset = self._builtin_video_presets()[name]
-            self._apply_video_settings_dict(preset)
-            self._log(f"已加载内置预设：{name}")
-            window.destroy()
-
-        ttk.Button(actions, text="加载用户预设", style="Accent.TButton", command=apply_user_preset).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(actions, text="加载内置预设", command=apply_builtin_preset).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        return GUI_settings.load_video_preset(self)
 
     def _format_preset_preview(self, settings):
-        data = dict(settings or {})
-        def value(key, default="未设置"):
-            text = str(data.get(key, "")).strip()
-            return text if text else default
-
-        lines = [
-            f"编码器：{value('encoder_name')}",
-            f"预设速度：{value('preset_name', self.preset_name.get())}",
-            f"质量模式：{value('quality_mode', 'CRF / 恒定质量')}",
-            f"CRF/CQ：{value('cq_value', '23')}",
-            f"目标码率：{value('bitrate')}",
-            f"分辨率：{value('resolution_name')}",
-            f"锐化：{value('sharpen_name', '关闭')}",
-            f"音频：{value('audio_mode')}",
-            f"音频码率：{value('audio_bitrate')}",
-            f"容器：{value('muxer_name')}",
-            f"输出倍速：{value('output_speed', '1.0')}x",
-        ]
-        effects = []
-        if data.get("use_lut") and str(data.get("lut_path", "")).strip():
-            effects.append(f"LUT：{data.get('lut_path')}")
-        if value("sharpen_name", "关闭") != "关闭":
-            effects.append(f"锐化：{value('sharpen_name')}")
-        if str(data.get("hidden_watermark_enabled", "")).lower() in {"true", "1"} or data.get("hidden_watermark_enabled") is True:
-            effects.append(f"隐藏水印：{value('hidden_watermark_mode', 'text')}")
-        extra = str(data.get("extra_ffmpeg_args", "")).strip()
-        if extra:
-            effects.append(f"高级参数：{extra}")
-        custom = str(data.get("custom_command", "")).strip()
-        if value("quality_mode", "") == "自定义命令" and custom:
-            effects.append(f"自定义命令：{custom}")
-        lines.append("")
-        lines.append("影响画面/声音的设置：")
-        lines.extend(f"- {item}" for item in effects) if effects else lines.append("- 无额外效果设置")
-        return "\n".join(lines)
+        return GUI_settings.format_preset_preview(self, settings)
 
     def _video_settings_dict(self):
+        return GUI_settings.video_settings_dict(self)
+
+    def _video_settings_dict_legacy(self):
         return {
             "encoder_name": self.encoder_name.get(),
             "advanced_encoders": self.advanced_encoders.get(),
@@ -3653,6 +3572,9 @@ class VideoCompressorApp:
         }
 
     def _apply_video_settings_dict(self, data):
+        return GUI_settings.apply_video_settings_dict(self, data)
+
+    def _apply_video_settings_dict_legacy(self, data):
         setters = {
             "encoder_name": self.encoder_name,
             "advanced_encoders": self.advanced_encoders,
@@ -3931,7 +3853,7 @@ class VideoCompressorApp:
         info_a = ffmpeg.probe_media_info(path_a)
         info_b = ffmpeg.probe_media_info(path_b)
         if not info_a or not info_b:
-            messagebox.showwarning("读取失败", "至少有一个文件无法读取媒体信息，请确认 ffprobe 可用。")
+            messagebox.showwarning("读取失败", "至少有一个文件无法读取媒体信息，请确认主程序目录下或系统环境变量中的 ffprobe 可用。")
             return
         rows = self._build_mediainfo_comparison_rows(path_a, info_a, path_b, info_b)
         self.media_compare_rows = list(rows)
@@ -4459,9 +4381,9 @@ class VideoCompressorApp:
         if not text_widget or not text_widget.winfo_exists():
             return
         if info is None or not info.ffmpeg:
-            lines = ["未找到 ffmpeg。请安装 FFmpeg 6.0+ 并加入 PATH。", "", *system_lines]
+            lines = ["未找到 ffmpeg。请将 FFmpeg 6.0+ 放到主程序目录，或加入 PATH。", "", *system_lines]
             if window and window.winfo_exists():
-                messagebox.showerror("环境检测", "未找到 ffmpeg。请安装 FFmpeg 6.0+ 并加入 PATH。", parent=window)
+                messagebox.showerror("环境检测", "未找到 ffmpeg。请将 FFmpeg 6.0+ 放到主程序目录，或加入 PATH。", parent=window)
         else:
             gpu_summary = "、".join((gpu_names or self.detected_gpu_names)[:3]) if (gpu_names or self.detected_gpu_names) else "未读取到显卡名称"
             lines = [
@@ -4812,14 +4734,10 @@ class VideoCompressorApp:
         self._start_worker("音频倒放", self._audio_reverse_worker)
 
     def start_common_trim(self):
-        source = Path(self.common_trim_video.get())
-        if not source.exists():
-            messagebox.showwarning("没有视频", "请先选择要截取的视频文件。")
-            return
-        if self._parse_time_seconds(self.common_trim_end.get()) <= self._parse_time_seconds(self.common_trim_start.get()):
-            messagebox.showwarning("时间无效", "结束时间必须大于开始时间。")
-            return
-        self._start_worker("截取视频", self._common_trim_worker, source)
+        return GUI_common.start_common_trim(self)
+
+    def start_common_slideshow(self):
+        return GUI_common.start_common_slideshow(self)
 
     def start_common_demux(self):
         source = Path(self.common_trim_video.get())
@@ -5341,23 +5259,10 @@ class VideoCompressorApp:
         )
 
     def _common_trim_worker(self, source_path):
-        output_dir = Path(self.common_output_dir.get()).resolve()
-        output_dir.mkdir(parents=True, exist_ok=True)
-        suffix = VIDEO_MUXERS[self.common_trim_muxer.get()]
-        target = ffmpeg.unique_path(output_dir, source_path, suffix, self.file_conflict_action.get() == "覆盖", tag="trim")
-        start_time = self.common_trim_start.get().strip()
-        end_time = self.common_trim_end.get().strip()
-        self.messages.put(("status", f"截取视频：{source_path.name}"))
-        start = time.perf_counter()
-        source_size = source_path.stat().st_size if source_path.exists() else 0
-        ok = self._run_ffmpeg(self._build_common_trim_command(source_path, target, start_time, end_time), source_path)
-        elapsed = time.perf_counter() - start
-        target_size = target.stat().st_size if ok and target.exists() else 0
-        result = CompressionResult(source_path, target, ok, elapsed, source_size, target_size)
-        self._log_compression_result(result)
-        self.messages.put(("status", "截取视频完成" if ok else "截取视频失败"))
-        if ok and self.auto_open_output.get():
-            self._open_folder(output_dir)
+        return GUI_common.common_trim_worker(self, source_path)
+
+    def _common_slideshow_worker(self, audio_path):
+        return GUI_common.common_slideshow_worker(self, audio_path)
 
     def _common_demux_worker(self, source_path):
         output_dir = Path(self.common_output_dir.get()).resolve()
@@ -5366,7 +5271,7 @@ class VideoCompressorApp:
         video_suffix = source_path.suffix.lower() or ".mp4"
         video_target = ffmpeg.unique_path(output_dir, source_path, video_suffix, overwrite, tag="video_only")
         audio_target = ffmpeg.unique_path(output_dir, source_path, ".m4a", overwrite, tag="audio_only")
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         cmd_video = [
             ffmpeg_path,
             "-hide_banner",
@@ -5410,7 +5315,7 @@ class VideoCompressorApp:
         overwrite = self.file_conflict_action.get() == "覆盖"
         direction = self.common_channel_copy_mode.get()
         pan_expr = "stereo|c0=c0|c1=c0" if direction == "左复制到右" else "stereo|c0=c1|c1=c1"
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         is_video = source_path.suffix.lower() in VIDEO_EXTENSIONS
         if is_video:
             suffix = source_path.suffix.lower() or ".mp4"
@@ -5460,43 +5365,22 @@ class VideoCompressorApp:
             self._open_folder(output_dir)
 
     def _build_common_trim_command(self, source_path, target, start_time, end_time):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
-        encoder_key = ENCODERS.get(self.common_trim_encoder.get(), "libx264")
-        encoder, pix_fmt = ffmpeg.resolve_encoder(encoder_key)
-        cmd = [
-            ffmpeg_path,
-            "-hide_banner",
-            "-y" if self.file_conflict_action.get() == "覆盖" else "-n",
-            "-ss",
-            start_time,
-            "-to",
-            end_time,
-            "-i",
-            str(source_path),
-            "-map",
-            "0:v?",
-            "-map",
-            "0:a?",
-            "-dn",
-            "-c:v",
-            encoder,
-        ]
-        if "nvenc" in encoder:
-            cmd += ["-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0"]
-        elif encoder.endswith("_amf"):
-            cmd += ["-quality", "balanced", "-rc", "cqp", "-qp_i", "23", "-qp_p", "23", "-qp_b", "23"]
-        elif encoder == "libsvtav1":
-            cmd += ["-preset", "6", "-crf", "28"]
-        elif encoder == "libvpx-vp9":
-            cmd += ["-crf", "30", "-b:v", "0", "-row-mt", "1"]
-        elif encoder == "prores_ks":
-            cmd += ["-profile:v", "3"]
-        else:
-            cmd += ["-preset", "medium", "-crf", "23"]
-        if pix_fmt:
-            cmd += ["-pix_fmt", pix_fmt]
-        cmd += ["-c:a", "copy", "-map_metadata", "0", str(target)]
-        return cmd
+        return GUI_common.build_common_trim_command(self, source_path, target, start_time, end_time)
+
+    def _build_common_slideshow_concat_file(self, audio_duration, image_duration):
+        return GUI_common.build_common_slideshow_concat_file(self, audio_duration, image_duration)
+
+    def _build_common_slideshow_command(self, concat_file, audio_path, target):
+        return GUI_common.build_common_slideshow_command(self, concat_file, audio_path, target)
+
+    def _concat_escape_path(self, path):
+        return GUI_common.concat_escape_path(path)
+
+    def _common_slideshow_resolution_size(self):
+        return GUI_common.common_slideshow_resolution_size(self)
+
+    def _common_slideshow_video_filter(self):
+        return GUI_common.common_slideshow_video_filter(self)
 
     def _video_target_path(self, output_dir, source_path, settings, action=None):
         action = action or self.file_conflict_action.get()
@@ -5703,7 +5587,7 @@ class VideoCompressorApp:
         return result
 
     def _build_audio_reverse_command(self, source_path, target, settings):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         encoder, _ = AUDIO_ENCODERS[settings.encoder_name]
         filters = ["areverse"]
         if settings.normalize:
@@ -5812,7 +5696,7 @@ class VideoCompressorApp:
             self._open_folder(output_dir)
 
     def _build_mux_merge_command(self, list_path, target):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         return [
             ffmpeg_path,
             "-hide_banner",
@@ -5831,7 +5715,7 @@ class VideoCompressorApp:
         ]
 
     def _build_mux_convert_command(self, source, target):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         cmd = [ffmpeg_path, "-hide_banner", "-y" if self.file_conflict_action.get() == "覆盖" else "-n", "-i", str(source), "-map", "0", "-c:v", "copy"]
         mode = self.mux_audio_mode.get()
         if mode == "复制音频":
@@ -5892,7 +5776,7 @@ class VideoCompressorApp:
         self.messages.put(("log", f"字幕已导出：{target}" if ok and target.exists() else "字幕导出失败：图形字幕可能无法直接导出为 SRT。"))
 
     def _build_subtitle_mux_command(self, source, target):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         cmd = [ffmpeg_path, "-hide_banner", "-y" if self.file_conflict_action.get() == "覆盖" else "-n", "-i", str(source)]
         for subtitle in self.subtitle_external_files:
             cmd += ["-i", subtitle]
@@ -5909,7 +5793,7 @@ class VideoCompressorApp:
         return cmd
 
     def _build_subtitle_export_command(self, source, stream_index, target):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         return [
             ffmpeg_path,
             "-hide_banner",
@@ -5939,7 +5823,7 @@ class VideoCompressorApp:
         return ffmpeg.unique_path(output_dir, source_path, suffix, self.file_conflict_action.get() == "覆盖", tag="anamorphic")
 
     def _build_anamorphic_command(self, source_path, target, preview=False):
-        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg_path = ffmpeg.find_tool("ffmpeg")
         factor = self._float_or_default(self.anamorphic_factor.get(), 1.33)
         filters = [f"scale=trunc(iw*{factor:.4f}/2)*2:trunc(ih/2)*2"]
         if self.anamorphic_auto_crop.get():
@@ -6263,9 +6147,9 @@ class VideoCompressorApp:
                 self.messages.put(("job_done", (job_id, code == 0)))
             return code == 0
         except FileNotFoundError:
-            self.messages.put(("log", "未找到 ffmpeg，请安装并加入 PATH。"))
+            self.messages.put(("log", "未找到 ffmpeg，请将 ffmpeg 放到主程序目录，或安装后加入 PATH。"))
             if show_job_window:
-                self.messages.put(("job_log", (job_id, "未找到 ffmpeg，请安装并加入 PATH。")))
+                self.messages.put(("job_log", (job_id, "未找到 ffmpeg，请将 ffmpeg 放到主程序目录，或安装后加入 PATH。")))
                 self.messages.put(("job_done", (job_id, False)))
             return False
         except Exception as exc:
@@ -6878,7 +6762,7 @@ class VideoCompressorApp:
             return
         info = ffmpeg.probe_media_info(path)
         self._update_mediainfo_indicators(info or {})
-        text = self._format_mediainfo(path, info) if info else "未能读取媒体信息。请确认 ffprobe 可用。"
+        text = self._format_mediainfo(path, info) if info else "未能读取媒体信息。请确认主程序目录下或系统环境变量中的 ffprobe 可用。"
         self.media_info_text.configure(state="normal")
         self.media_info_text.delete("1.0", END)
         self.media_info_text.insert("1.0", text)

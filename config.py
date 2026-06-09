@@ -4,9 +4,16 @@
 APP_TITLE = "小丸工具箱粉丝致敬版"
 WINDOW_SIZE = "1320x820"
 
-BUILD_VERSION = "1.1.1"
+BUILD_VERSION = "1.1.2"
 WINDOW_MIN_SIZE = (1120, 700)
-DEFAULT_OUTPUT_DIR = Path.cwd() / "output"
+def _preferred_output_root() -> Path:
+    d_drive = Path("D:/")
+    if d_drive.exists():
+        return d_drive / "maru-output"
+    return Path("C:/maru-output")
+
+
+DEFAULT_OUTPUT_DIR = _preferred_output_root()
 DEFAULT_PREVIEW_PATH = DEFAULT_OUTPUT_DIR / "_lut_preview.png"
 
 VIDEO_EXTENSIONS = {

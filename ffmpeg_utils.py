@@ -4,15 +4,52 @@ import shlex
 import shutil
 import subprocess
 import hashlib
+import sys
 from pathlib import Path
 
 from config import AUDIO_ENCODERS, AUDIO_MODES, ENCODER_FILENAME_TAGS, ENCODERS, PRESETS, RESOLUTIONS, RETRO_FORMATS, RETRO_RESOLUTIONS, SHARPEN_LEVELS, VIDEO_MUXERS
 from data import AudioSettings, CompressionSettings, EnvironmentInfo, RetroSettings
 
 
+def app_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def bundled_path(name: str) -> Path:
+    base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base_dir / name
+
+
+def preferred_icon_path(name: str) -> Path:
+    preferred = app_base_dir() / name
+    if preferred.exists():
+        return preferred
+    for candidate in sorted(app_base_dir().glob("*.ico")):
+        if candidate.is_file():
+            return candidate
+    return bundled_path(name)
+
+
+def local_tool_path(name: str) -> Path:
+    executable_name = f"{name}.exe" if os.name == "nt" else name
+    return app_base_dir() / executable_name
+
+
+def find_tool(name: str) -> str:
+    local_tool = local_tool_path(name)
+    if local_tool.exists():
+        return str(local_tool)
+    bundled = bundled_path(f"{name}.exe" if os.name == "nt" else name)
+    if bundled.exists():
+        return str(bundled)
+    return shutil.which(name) or name
+
+
 def detect_environment() -> EnvironmentInfo:
-    ffmpeg = shutil.which("ffmpeg") or ""
-    ffprobe = shutil.which("ffprobe") or ""
+    ffmpeg = find_tool("ffmpeg")
+    ffprobe = find_tool("ffprobe")
     encoders = run_capture([ffmpeg, "-hide_banner", "-encoders"]) if ffmpeg else ""
     encoder_text = encoders.lower()
     return EnvironmentInfo(
@@ -25,7 +62,7 @@ def detect_environment() -> EnvironmentInfo:
 
 
 def build_compress_command(source: Path, target: Path, settings: CompressionSettings, encoder_override=None, benchmark=False):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     if settings.quality_mode == "自定义命令" and settings.custom_command.strip():
         command = settings.custom_command.replace("{input}", str(source)).replace("{output}", str(target))
         return [ffmpeg] + shlex.split(command, posix=True)
@@ -95,7 +132,7 @@ def build_compress_command(source: Path, target: Path, settings: CompressionSett
 
 
 def build_thumbnail_command(video_path: Path, thumb_path: Path, thumbnail_time: float):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     return [
         ffmpeg,
         "-hide_banner",
@@ -113,7 +150,7 @@ def build_thumbnail_command(video_path: Path, thumb_path: Path, thumbnail_time: 
 
 
 def build_proxy_command(source: Path, target: Path, width=1280, bitrate="1200k"):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     return [
         ffmpeg,
         "-hide_banner",
@@ -141,7 +178,7 @@ def build_proxy_command(source: Path, target: Path, width=1280, bitrate="1200k")
 
 
 def build_audio_command(source: Path, target: Path, settings: AudioSettings):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     encoder, _ = AUDIO_ENCODERS[settings.encoder_name]
     cmd = [ffmpeg, "-hide_banner", "-y" if settings.overwrite else "-n", "-i", str(source), "-vn"]
     filters = []
@@ -161,7 +198,7 @@ def build_audio_command(source: Path, target: Path, settings: AudioSettings):
 
 
 def build_retro_command(source: Path, target: Path, settings: RetroSettings):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     preset = RETRO_FORMATS[settings.format_name]
     cmd = [ffmpeg, "-hide_banner", "-y" if settings.overwrite else "-n", "-i", str(source)]
     filters = retro_filters(settings)
@@ -177,7 +214,7 @@ def build_retro_command(source: Path, target: Path, settings: RetroSettings):
 
 
 def build_remux_command(source: Path, target: Path, audio_mode="copy", overwrite=False):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     cmd = [
         ffmpeg,
         "-hide_banner",
@@ -202,7 +239,7 @@ def build_preview_command(source: Path, preview_path: Path, settings: Compressio
 
 
 def build_frame_command(source: Path, frame_path: Path, seconds: float, settings: CompressionSettings, width=960):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     return [
         ffmpeg,
         "-hide_banner",
@@ -220,7 +257,7 @@ def build_frame_command(source: Path, frame_path: Path, seconds: float, settings
 
 
 def build_screenshot_command(source: Path, target: Path, seconds: float, settings: CompressionSettings):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     filters = video_filters(settings, use_gpu_filters=False)
     cmd = [
         ffmpeg,
@@ -238,7 +275,7 @@ def build_screenshot_command(source: Path, target: Path, seconds: float, setting
 
 
 def build_lut_thumbnail_command(source: Path, target: Path, seconds: float, lut_path: Path, width=360):
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = find_tool("ffmpeg")
     escaped = filter_path(str(lut_path))
     return [
         ffmpeg,
@@ -273,7 +310,7 @@ def run_capture(cmd):
 
 
 def duration_seconds(source: Path):
-    ffprobe = shutil.which("ffprobe")
+    ffprobe = find_tool("ffprobe")
     if not ffprobe:
         return 0
     output = run_capture([
@@ -293,7 +330,7 @@ def duration_seconds(source: Path):
 
 
 def probe_media_info(source: Path):
-    ffprobe = shutil.which("ffprobe")
+    ffprobe = find_tool("ffprobe")
     if not ffprobe:
         return {}
     output = run_capture([
