@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "E:\PROG视频高性能压缩器\main.py", line 7, in main
-    from gui import run_app
-  File "E:\PROG视频高性能压缩器\gui.py", line 2117
-    except Exception as exc:
-    ^^^^^^
-SyntaxError: invalid syntax
