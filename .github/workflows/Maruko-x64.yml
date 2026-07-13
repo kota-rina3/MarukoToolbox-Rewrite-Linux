@@ -24,14 +24,14 @@ jobs:
         apt update && apt upgrade -y
         apt install -y \
           python3-pip \
-          python3-setuptools
+          python3-setuptools \
           python3-tk \
           patchelf
 
     - name: 安装 Python 模块
       run: |
         pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple
-        pip3 install nuitka==4.0.8 zstandard urllib3 --break-system-packages
+        pip3 install nuitka==4.0.8 zstandard urllib3 tkinterdnd2 --break-system-packages
 
     - name: 编译
       run: |
