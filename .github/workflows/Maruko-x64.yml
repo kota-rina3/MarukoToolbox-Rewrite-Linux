@@ -1,0 +1,38 @@
+name: Maruko-x64
+
+on:
+  workflow_dispatch:
+    branch: master
+
+jobs:
+  build:
+    name: 编译构建
+    runs-on: ubuntu-latest
+    container: linuxdeepin/deepin:crimson
+
+    steps:
+    - name: 检查代码
+      uses: actions/checkout@v4
+
+    - name: 安装 Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: 安装所需依赖
+      run: |
+        apt update
+        apt install -y \
+          python3-dev \
+          python3-pip \
+          python3-tk
+
+    - name: 编译
+      run: |
+        nuitka --onefile --standalone --windows-console-mode=disable --show-progress --lto=yes --jobs=4 --enable-plugins=tk-inter --include-data-file='./hooks/pre_find_module_path/hook-tkinter.py'='./hooks/pre_find_module_path/hook-tkinter.py' ./main.py
+
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: Maruko-x64
+        path: ./
