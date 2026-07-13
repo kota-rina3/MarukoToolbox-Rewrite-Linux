@@ -26,6 +26,8 @@ jobs:
           python3-pip \
           python3-setuptools \
           python3-tk \
+          build-essential \
+          ccache \
           patchelf
 
     - name: 安装 Python 模块
@@ -35,7 +37,7 @@ jobs:
 
     - name: 编译
       run: |
-        nuitka --onefile --standalone --windows-console-mode=disable --show-progress --lto=yes --jobs=4 --enable-plugins=tk-inter --include-module=math --include-data-file='./hooks/pre_find_module_path/hook-tkinter.py'='./hooks/pre_find_module_path/hook-tkinter.py' ./main.py
+        nuitka --onefile --standalone --windows-console-mode=disable --show-progress --lto=yes --jobs=4 --enable-plugins=tk-inter --include-module=math --static-libpython=yes --include-data-file='./hooks/pre_find_module_path/hook-tkinter.py'='./hooks/pre_find_module_path/hook-tkinter.py' ./main.py
 
     - name: 上传构建产物
       uses: actions/upload-artifact@v4
